@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { apiFetch } from '@/lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -67,7 +67,7 @@ function ConfirmDialog({
                         {icon}
                     </div>
                     <h3 className="font-black text-gray-900 text-xl mb-2 tracking-tight">{title}</h3>
-                    <p className="text-gray-500 text-sm mb-4 leading-relaxed font-medium">"{detail}"</p>
+                    <p className="text-gray-500 text-sm mb-4 leading-relaxed font-medium">&quot;{detail}&quot;</p>
                     {warning && (
                         <div className="text-[11px] font-bold text-amber-700 bg-amber-50/50 border border-amber-100 rounded-2xl p-4 mb-4 text-left leading-relaxed">
                             {warning}
@@ -759,6 +759,9 @@ function NotificationDropdown({
 
 /* ─── Global Admin Dashboard ─────────────────────────────── */
 function GlobalDashboard({ user }: { user: any }) {
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
     const [stats, setStats] = useState<Stats | null>(null);
     const [loading, setLoading] = useState(true);
     const [allUsers, setAllUsers] = useState<any[]>([]);
@@ -815,9 +818,6 @@ function GlobalDashboard({ user }: { user: any }) {
     const [composeMsg, setComposeMsg] = useState('');
     const [composeSending, setComposeSending] = useState(false);
     const [composeSent, setComposeSent] = useState(false);
-
-    const router = useRouter();
-    const searchParams = useSearchParams();
 
     const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
         setToast({ msg, type });
@@ -1015,19 +1015,42 @@ function GlobalDashboard({ user }: { user: any }) {
         showToast(`Company renamed to ${updatedTenant.name}`);
     };
 
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+    useEffect(() => {
+        setIsSidebarOpen(false);
+    }, [pathname, searchParams]);
+
     return (
         <div className="min-h-screen bg-[#F5F6FA] flex">
-            <AdminSidebar user={user} tenants={tenants} />
+            <AdminSidebar 
+                user={user} 
+                tenants={tenants} 
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+            />
 
-            <div className="flex-1 ml-56 flex flex-col min-h-screen">
+            <div className="flex-1 lg:ml-64 flex flex-col min-h-screen w-full transition-all duration-300">
                 {/* Top Bar */}
-                <header className="bg-white border-b border-gray-100 h-14 px-8 flex items-center justify-between sticky top-0 z-40 shadow-sm">
-                    <div>
-                        <p className="text-gray-800 font-bold text-sm">Welcome back, <span className="text-[#000000]">{user.name}</span></p>
-                    </div>
+                <header className="bg-white border-b border-gray-100 h-16 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-40 shadow-sm">
                     <div className="flex items-center gap-4">
-                        <div className="relative group">
-                            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-400 text-sm w-64 focus-within:ring-2 focus-within:ring-[#000000]/20 focus-within:border-[#000000] transition-all">
+                        <button 
+                            onClick={() => setIsSidebarOpen(true)}
+                            className="lg:hidden p-2 -ml-2 text-gray-400 hover:text-[#000000] transition-colors"
+                        >
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="3" y1="12" x2="21" y2="12"></line>
+                                <line x1="3" y1="6" x2="21" y2="6"></line>
+                                <line x1="3" y1="18" x2="21" y2="18"></line>
+                            </svg>
+                        </button>
+                        <div className="hidden sm:block">
+                            <p className="text-gray-800 font-bold text-sm">Welcome back, <span className="text-[#000000]">{user.name}</span></p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 sm:gap-4">
+                        <div className="relative group hidden md:block">
+                            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-400 text-sm w-48 lg:w-64 focus-within:ring-2 focus-within:ring-[#000000]/20 focus-within:border-[#000000] transition-all">
                                 <Search size={14} className={isSearching ? 'animate-pulse text-[#000000]' : ''} />
                                 <input
                                     type="text"
@@ -1052,7 +1075,7 @@ function GlobalDashboard({ user }: { user: any }) {
                                                 <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
                                                     <Search size={20} className="text-gray-300" />
                                                 </div>
-                                                <p className="text-xs font-bold text-gray-400">No results found for "{searchQuery}"</p>
+                                                <p className="text-xs font-bold text-gray-400">No results found for &quot;{searchQuery}&quot;</p>
                                             </div>
                                         ) : (
                                             <>
@@ -1371,6 +1394,7 @@ function GlobalDashboard({ user }: { user: any }) {
 
 /* ─── Company Admin Dashboard ────────────────────────────── */
 function CompanyDashboard({ user }: { user: any }) {
+    const pathname = usePathname();
     const searchParams = useSearchParams();
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -1394,26 +1418,101 @@ function CompanyDashboard({ user }: { user: any }) {
         window.location.href = '/';
     };
 
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+    useEffect(() => {
+        setIsSidebarOpen(false);
+    }, [pathname, searchParams]);
+
     return (
         <div className="min-h-screen bg-[#F5F6FA] flex">
-            <AdminSidebar user={user} tenants={[]} />
+            <AdminSidebar 
+                user={user} 
+                tenants={[]} 
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+            />
 
-            <div className="flex-1 ml-56 flex flex-col min-h-screen">
-                <header className="bg-white border-b border-gray-100 h-14 px-8 flex items-center justify-between sticky top-0 z-40 shadow-sm">
-                    <div>
-                        <p className="text-gray-800 font-bold text-sm">Welcome back, <span className="text-[#000000]">{user.name}</span></p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-400 text-sm w-52">
-                            <Search size={14} /><span className="text-xs">Search...</span>
+            <div className="flex-1 lg:ml-64 flex flex-col min-h-screen w-full transition-all duration-300">
+                {/* Brand Header */}
+                <header className="bg-[#0A0A0A] border-b border-white/5 h-20 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-40 shadow-2xl">
+                    <div className="flex items-center gap-6">
+                        <button 
+                            onClick={() => setIsSidebarOpen(true)}
+                            className="lg:hidden p-2 -ml-2 text-gray-400 hover:text-brandYellow transition-colors"
+                        >
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="3" y1="12" x2="21" y2="12"></line>
+                                <line x1="3" y1="6" x2="21" y2="6"></line>
+                                <line x1="3" y1="18" x2="21" y2="18"></line>
+                            </svg>
+                        </button>
+                        
+                        {/* Company Branding */}
+                        <div className="flex items-center gap-3 border-r border-white/10 pr-6 mr-2">
+                           <div className="w-10 h-10 rounded-xl bg-brandYellow flex items-center justify-center text-[#000000] font-black text-xl shadow-lg shadow-brandYellow/20">
+                               D
+                           </div>
+                           <div className="hidden md:block">
+                               <h1 className="text-white font-black text-lg tracking-tight leading-none uppercase">Droga Pharma</h1>
+                               <p className="text-brandYellow text-[10px] font-black uppercase tracking-[0.2em] mt-1.5">TA Teams Dashboard</p>
+                           </div>
                         </div>
-                        <button className="relative text-gray-400 hover:text-gray-700 transition-colors"><Bell size={18} /></button>
-                        <div className="flex items-center gap-3 border-l border-gray-200 pl-4 ml-2">
-                            <div className="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-500 font-black text-xs">
+
+                        {/* Horizontal Nav */}
+                        <nav className="hidden xl:flex items-center gap-1">
+                            {[
+                                { label: 'Jobs', tab: 'Jobs' },
+                                { label: 'Candidates', tab: 'Candidates' },
+                                { label: 'Employees', tab: 'Users' },
+                                { label: 'Hiring Plan', tab: 'HiringPlan' },
+                                { label: 'Reports', tab: 'Reports' }
+                            ].map((item) => {
+                                const active = (searchParams.get('tab') === item.tab) || (!searchParams.get('tab') && item.tab === 'Dashboard');
+                                return (
+                                    <button
+                                        key={item.label}
+                                        onClick={() => router.push(`/admin/dashboard?tab=${item.tab}`)}
+                                        className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
+                                            active 
+                                            ? 'bg-brandYellow text-[#000000] shadow-lg shadow-brandYellow/10' 
+                                            : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                        }`}
+                                    >
+                                        {item.label}
+                                    </button>
+                                );
+                            })}
+                        </nav>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                        <div className="hidden lg:flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-gray-500 text-sm focus-within:border-brandYellow/50 transition-all w-64">
+                            <Search size={14} className="text-brandYellow" />
+                            <input 
+                                type="text" 
+                                placeholder="Search everything..." 
+                                className="bg-transparent border-none outline-none text-xs text-white placeholder:text-gray-600 w-full font-medium"
+                            />
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                            <button className="p-2.5 rounded-xl bg-white/5 text-gray-400 hover:text-brandYellow hover:bg-brandYellow/10 transition-all relative border border-white/5">
+                                <Mail size={18} />
+                                <span className="absolute top-2 right-2 w-2 h-2 bg-brandYellow rounded-full border-2 border-[#0A0A0A]"></span>
+                            </button>
+                            <button className="p-2.5 rounded-xl bg-white/5 text-gray-400 hover:text-brandYellow hover:bg-brandYellow/10 transition-all relative border border-white/5">
+                                <Bell size={18} />
+                                <span className="absolute top-2 right-2 w-2 h-2 bg-brandYellow rounded-full border-2 border-[#0A0A0A]"></span>
+                            </button>
+                        </div>
+
+                        <div className="flex items-center gap-3 border-l border-white/10 pl-4 ml-2">
+                            <div className="w-9 h-9 rounded-full bg-brandYellow flex items-center justify-center text-[#000000] font-black text-xs border-2 border-white/10 shadow-lg cursor-pointer hover:scale-105 transition-transform">
                                 {user.name.charAt(0).toUpperCase()}
                             </div>
-                            <button onClick={onLogout} className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-red-500 transition-colors">
-                                <LogOut size={14} /> Logout
+                            <button onClick={onLogout} className="hidden sm:flex items-center gap-1.5 text-[10px] font-black text-gray-500 hover:text-red-500 uppercase tracking-widest transition-colors">
+                                <LogOut size={14} /> 
                             </button>
                         </div>
                     </div>
@@ -1425,6 +1524,8 @@ function CompanyDashboard({ user }: { user: any }) {
                         if (tab === 'Users') return <CompanyUsersView />;
                         if (tab === 'Jobs') return <CompanyJobsView user={user} />;
                         if (tab === 'Candidates') return <CompanyApplicantsView user={user} />;
+                        if (tab === 'HiringPlan') return <GlobalRequisitionsView tenants={[]} />;
+                        if (tab === 'Reports') return <GlobalReportsView />;
 
                         return (
                             <>
@@ -1951,21 +2052,23 @@ function GlobalJobsView({ tenants }: { tenants: any[] }) {
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
-                <h2 className="font-black text-gray-900 flex-1">Job Posts — All Companies</h2>
-                <select className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#000000]" value={filterTenant} onChange={e => setFilterTenant(e.target.value)}>
-                    <option value="">All Companies</option>
-                    {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-                <select className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#000000]" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+                <h2 className="font-black text-gray-900 flex-1">{tenants.length > 0 ? 'Live Job Openings — All Companies' : 'Live Job Openings'}</h2>
+                {tenants.length > 0 && (
+                    <select className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brandYellow/50 font-bold text-gray-700 bg-white shadow-sm" value={filterTenant} onChange={e => setFilterTenant(e.target.value)}>
+                        <option value="">All Companies</option>
+                        {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                )}
+                <select className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brandYellow/50 font-bold text-gray-700 bg-white shadow-sm" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
                     <option value="">All Statuses</option>
                     <option value="active">Active</option>
                     <option value="pending">Pending</option>
                     <option value="closed">Closed</option>
                 </select>
             </div>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden text-black">
                 {loading ? (
-                    <div className="p-10 flex justify-center"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#000000]" /></div>
+                    <div className="p-10 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brandYellow" /></div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full">
@@ -2064,12 +2167,14 @@ function GlobalRequisitionsView({ tenants }: { tenants: any[] }) {
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
-                <h2 className="font-black text-gray-900 flex-1">Hiring Plan — All Companies</h2>
-                <select className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#000000]" value={filterTenant} onChange={e => setFilterTenant(e.target.value)}>
-                    <option value="">All Companies</option>
-                    {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-                <select className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#000000]" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+                <h2 className="font-black text-gray-900 flex-1">{tenants.length > 0 ? 'Hiring Plan — All Companies' : 'Hiring Plan'}</h2>
+                {tenants.length > 0 && (
+                    <select className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brandYellow/50 font-bold text-gray-700 bg-white shadow-sm" value={filterTenant} onChange={e => setFilterTenant(e.target.value)}>
+                        <option value="">All Companies</option>
+                        {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                )}
+                <select className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brandYellow/50 font-bold text-gray-700 bg-white shadow-sm" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
                     <option value="">All Statuses</option>
                     <option value="pending">Pending Approval</option>
                     <option value="approved">Approved</option>
@@ -2079,7 +2184,7 @@ function GlobalRequisitionsView({ tenants }: { tenants: any[] }) {
 
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 {loading ? (
-                    <div className="p-10 flex justify-center"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#000000]" /></div>
+                    <div className="p-10 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brandYellow" /></div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full">

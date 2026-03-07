@@ -50,7 +50,7 @@ export default function LoginPage() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5 }}
-                className="w-full max-w-md bg-white rounded-[32px] shadow-2xl shadow-primary/5 border border-primary/5 p-10"
+                className="w-full max-w-md bg-white rounded-[32px] shadow-2xl shadow-primary/5 border border-primary/5 px-6 py-8 sm:p-10"
             >
                 <div className="text-center mb-10 relative">
                     {/* Back to Site Button - Pro Level */}
@@ -58,7 +58,7 @@ export default function LoginPage() {
                         initial={{ opacity: 0, y: -10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.3, duration: 0.5 }}
-                        className="absolute -top-14 left-0"
+                        className="absolute -top-10 sm:-top-14 left-0"
                     >
                         <Link
                             href="/"
@@ -79,8 +79,8 @@ export default function LoginPage() {
                     <Link href="/" className="inline-block mb-8 group">
                         <div className="flex flex-col items-center">
                             <div className="flex items-center justify-center">
-                                <span className="text-black font-black text-3xl tracking-tighter leading-none">DROGA</span>
-                                <span className="text-black font-extralight text-3xl tracking-tight ml-2 leading-none uppercase">Group</span>
+                                <span className="text-black font-black text-2xl sm:text-3xl tracking-tighter leading-none">DROGA</span>
+                                <span className="text-black font-extralight text-2xl sm:text-3xl tracking-tight ml-2 leading-none uppercase">Group</span>
                             </div>
                             <div className="flex items-center gap-2 mt-2 w-full">
                                 <div className="h-[0.5px] bg-black/10 flex-1" />
@@ -136,7 +136,7 @@ export default function LoginPage() {
 
                 <div className="mt-8 text-center">
                     <p className="text-sm text-primary/60 mb-4">
-                        Don't have an account?{" "}
+                        Don&apos;t have an account?{" "}
                         <a href="#" className="text-[#FDF22F] font-black hover:underline uppercase tracking-wide">Contact Admin</a>
                     </p>
                     <div className="pt-6 border-t border-primary/5">

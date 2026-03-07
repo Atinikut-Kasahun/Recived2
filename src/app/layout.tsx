@@ -6,9 +6,13 @@ import Script from "next/script";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-    title: "DROGA GROUP HIRING HUB",
+    title: "Droga Group Hiring Hub",
     description:
         "Join a team of innovators, creators, and problem-solvers who are redefining what's possible in healthcare and technology.",
+    themeColor: "#FDF22F",
+    icons: {
+        icon: "/favicon.png",
+    }
 };
 
 export default function RootLayout({

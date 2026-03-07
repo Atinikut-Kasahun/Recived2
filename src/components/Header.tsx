@@ -86,7 +86,7 @@ export default function Header() {
                                     animate={{ opacity: 1, scale: 1 }}
                                     transition={{ duration: 0.5, delay: i * 0.1 }}
                                     href={`/${item.toLowerCase() === "about us" ? "#about-us" : item.toLowerCase() === "contact" ? "#contact" : "#" + item.toLowerCase()}`}
-                                    className="text-[13px] font-black uppercase tracking-wider transition-all hover:text-[#000000] text-[#000000]"
+                                    className="text-[13px] font-black tracking-wider transition-all hover:text-black hover:bg-[#FDF22F] px-4 py-2 rounded-lg text-[#000000]/80"
                                 >
                                     {item}
                                 </motion.a>
@@ -110,7 +110,7 @@ export default function Header() {
                             ) : (
                                 <Link
                                     href="/login"
-                                    className="text-[13px] font-black uppercase tracking-wider text-[#000000] hover:text-[#000000] transition-colors pl-4 border-l border-[#000000]/10"
+                                    className="text-[13px] font-bold tracking-wider text-[#000000]/80 hover:text-black hover:bg-[#FDF22F] px-4 py-2 rounded-lg transition-all ml-4 border-l border-[#000000]/10"
                                 >
                                     Login
                                 </Link>
@@ -167,11 +167,14 @@ export default function Header() {
                 transition={{ type: "spring", damping: 25, stiffness: 200 }}
                 className="fixed top-0 right-0 h-full w-[80%] max-w-[320px] bg-white z-[55] lg:hidden shadow-2xl p-8 flex flex-col"
             >
-                <div className="mb-12">
-                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#000000]/40">Menu</span>
+                <div className="flex justify-between items-start mb-10">
+                    <div className="flex flex-col">
+                        <span className="text-[#000000] font-black text-2xl tracking-tighter leading-none">DROGA GROUP</span>
+                        <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#000000]/30 mt-1">Hiring Hub</span>
+                    </div>
                 </div>
 
-                <div className="flex flex-col gap-8">
+                <div className="flex flex-col gap-4">
                     {["Jobs", "About Us", "Contact"].map((item, i) => (
                         <motion.a
                             key={item}
@@ -180,7 +183,7 @@ export default function Header() {
                             transition={{ delay: i * 0.1 + 0.2 }}
                             href={`/${item.toLowerCase() === "about us" ? "#about-us" : item.toLowerCase() === "contact" ? "#contact" : "#" + item.toLowerCase()}`}
                             onClick={() => setIsMenuOpen(false)}
-                            className="text-2xl font-black text-[#000000] uppercase tracking-tighter hover:bg-[#FDF22F] -mx-4 px-4 py-2 rounded-xl transition-colors"
+                            className="text-3xl font-bold text-[#000000] tracking-tighter hover:bg-[#FDF22F] -mx-4 px-4 py-3 rounded-xl transition-colors"
                         >
                             {item}
                         </motion.a>
@@ -188,37 +191,49 @@ export default function Header() {
 
                     <div className="h-px w-full bg-[#000000]/5 my-4" />
 
-                    {user ? (
-                        <>
+                        {user ? (
+                            <>
+                                <Link
+                                    href="/dashboard"
+                                    onClick={() => setIsMenuOpen(false)}
+                                    className="text-xl font-bold text-[#000000]"
+                                >
+                                    Dashboard
+                                </Link>
+                                <button
+                                    onClick={handleLogout}
+                                    className="text-xl font-bold text-red-500 text-left"
+                                >
+                                    Logout
+                                </button>
+                            </>
+                        ) : (
                             <Link
-                                href="/dashboard"
+                                href="/login"
                                 onClick={() => setIsMenuOpen(false)}
-                                className="text-xl font-bold text-[#000000]"
+                                className="text-2xl font-bold text-[#000000] tracking-tighter"
                             >
-                                Dashboard
+                                Login
                             </Link>
-                            <button
-                                onClick={handleLogout}
-                                className="text-xl font-bold text-red-500 text-left"
-                            >
-                                Logout
-                            </button>
-                        </>
-                    ) : (
-                        <Link
-                            href="/login"
-                            onClick={() => setIsMenuOpen(false)}
-                            className="text-xl font-black text-[#000000] uppercase tracking-tighter"
-                        >
-                            Login
-                        </Link>
-                    )}
-                </div>
+                        )}
+                    </div>
 
-                <div className="mt-auto pt-10">
-                    <p className="text-[10px] font-bold text-[#000000]/30 uppercase tracking-widest">
-                        Droga Group Hiring Hub
-                    </p>
+                <div className="mt-auto flex flex-col items-center">
+                    {/* Thumb Zone Close Button */}
+                    <button
+                        onClick={() => setIsMenuOpen(false)}
+                        className="w-16 h-16 flex items-center justify-center bg-[#FDF22F] text-black rounded-full shadow-xl hover:shadow-2xl transition-all active:scale-90 mb-8"
+                    >
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                    
+                    <div className="w-full pt-6 border-t border-[#000000]/5 flex justify-between items-center text-[10px] font-bold text-[#000000]/20 uppercase tracking-[0.2em]">
+                        <span>Droga Group Hiring Hub</span>
+                        <span>© 2026</span>
+                    </div>
                 </div>
             </motion.div>
         </>

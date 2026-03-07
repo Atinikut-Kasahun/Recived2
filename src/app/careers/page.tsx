@@ -237,7 +237,7 @@ function CareersContent() {
                                 initial={{ opacity: 0, scale: 0.9 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 transition={{ delay: idx * 0.05 }}
-                                className="bg-[#FEFCE8] p-8 rounded-[32px] shadow-sm hover:shadow-2xl hover:shadow-[#000000]/5 transition-all group flex flex-col justify-between"
+                                className="group p-8 bg-white rounded-[40px] border border-gray-100 transition-all hover:border-[#000000]/10 hover:shadow-[-10px_20px_50px_rgba(0,0,0,0.05)] flex flex-col justify-between"
                             >
                                 <div className="space-y-4">
                                     {/* Header Row */}
@@ -297,7 +297,7 @@ function CareersContent() {
 
                                 <button
                                     onClick={() => handleApplyClick(job)}
-                                    className="bg-black text-white w-full py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-[0.1em] hover:bg-gray-900 transition-all transform active:scale-[0.98] mt-6 shadow-xl shadow-black/10"
+                                    className="w-full py-3.5 rounded-xl border-2 border-black/10 bg-transparent text-black font-black text-[11px] uppercase tracking-[0.1em] hover:bg-[#FDF22F] hover:text-black hover:border-[#FDF22F] transition-all transform active:scale-[0.98] mt-6"
                                 >
                                     Apply Now —&gt;
                                 </button>

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { apiFetch } from '@/lib/api';
@@ -32,6 +32,13 @@ export default function GlobalSettings() {
         type: 'warning'
     });
     const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+    useEffect(() => {
+        setIsSidebarOpen(false);
+    }, [pathname, searchParams]);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -172,15 +179,31 @@ export default function GlobalSettings() {
 
     return (
         <div className="min-h-screen bg-[#F5F6FA] flex">
-            <AdminSidebar user={user} />
+            <AdminSidebar 
+                user={user} 
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+            />
 
-            <div className="flex-1 ml-56 flex flex-col min-h-screen">
+            <div className="flex-1 lg:ml-64 flex flex-col min-h-screen w-full transition-all duration-300">
                 {/* Top Bar */}
-                <header className="bg-white border-b border-gray-100 h-14 px-8 flex items-center justify-between sticky top-0 z-30 shadow-sm">
-                    <h1 className="text-gray-800 font-bold text-sm">Settings</h1>
+                <header className="bg-white border-b border-gray-100 h-16 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-30 shadow-sm">
                     <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-400 text-sm w-48">
-                            <Search size={14} /><span className="text-xs">Search...</span>
+                        <button 
+                            onClick={() => setIsSidebarOpen(true)}
+                            className="lg:hidden p-2 -ml-2 text-gray-400 hover:text-[#000000] transition-colors"
+                        >
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="3" y1="12" x2="21" y2="12"></line>
+                                <line x1="3" y1="6" x2="21" y2="6"></line>
+                                <line x1="3" y1="18" x2="21" y2="18"></line>
+                            </svg>
+                        </button>
+                        <h1 className="text-gray-800 font-bold text-sm">Settings</h1>
+                    </div>
+                    <div className="flex items-center gap-2 sm:gap-4">
+                        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-400 text-sm w-32 sm:w-48">
+                            <Search size={14} /><span className="text-xs hidden sm:inline">Search...</span>
                         </div>
                         <button className="text-gray-400 hover:text-gray-700 transition-colors"><Bell size={18} /></button>
                         <div className="flex items-center gap-3 border-l border-gray-200 pl-4 ml-2">
@@ -194,15 +217,15 @@ export default function GlobalSettings() {
                     </div>
                 </header>
 
-                <main className="flex-1 p-8">
-                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex min-h-[calc(100vh-8rem)]">
+                <main className="flex-1 p-4 sm:p-8">
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row min-h-[calc(100vh-8rem)]">
                         {/* Vertical Tabs */}
-                        <div className="w-52 border-r border-gray-100 p-4 flex flex-col gap-1 shrink-0">
+                        <div className="w-full md:w-52 border-b md:border-b-0 md:border-r border-gray-100 p-4 flex md:flex-col gap-1 shrink-0 overflow-x-auto custom-scrollbar">
                             {tabs.map(tab => (
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
-                                    className={`text-left px-4 py-3 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2.5 ${activeTab === tab.id ? 'bg-[#000000]/10 text-[#000000]' : 'text-gray-500 hover:bg-gray-50'}`}
+                                    className={`text-left px-4 py-3 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2.5 whitespace-nowrap ${activeTab === tab.id ? 'bg-[#000000]/10 text-[#000000]' : 'text-gray-500 hover:bg-gray-50'}`}
                                 >
                                     {tab.icon}{tab.label}
                                 </button>
@@ -210,7 +233,7 @@ export default function GlobalSettings() {
                         </div>
 
                         {/* Content */}
-                        <div className="flex-1 p-10 max-w-2xl">
+                        <div className="flex-1 p-6 sm:p-10 max-w-2xl">
 
                             {/* ── PROFILE ── */}
                             {activeTab === 'profile' && (
@@ -346,7 +369,7 @@ export default function GlobalSettings() {
                                                         onClick={() => { setShowAddAdmin(false); setGeneratedPassword(''); }}
                                                         className="text-emerald-700 text-xs font-bold hover:underline"
                                                     >
-                                                        Done, I've saved it
+                                                        Done, I&apos;ve saved it
                                                     </button>
                                                 </div>
                                             ) : (

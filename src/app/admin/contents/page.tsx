@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { apiFetch, API_URL } from '@/lib/api';
 import { Save, Image as ImageIcon, Upload, Users, TrendingUp, BookOpen, Star, RefreshCw, Plus, Trash2, CheckCircle } from 'lucide-react';
@@ -12,16 +12,17 @@ function SectionCard({ title, description, children, onSave, saving }: { title: 
         <section className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm mb-8">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                 <div>
-                    <h2 className="font-bold text-gray-900">{title}</h2>
-                    <p className="text-xs text-gray-500 mt-1">{description}</p>
+                    <h2 className="font-bold text-gray-900 text-sm sm:text-base">{title}</h2>
+                    <p className="text-[10px] sm:text-xs text-gray-500 mt-1">{description}</p>
                 </div>
                 <button
                     onClick={onSave}
                     disabled={saving}
-                    className="flex items-center gap-2 bg-[#000000] text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-[#155a50] transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 bg-[#000000] text-white px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-sm font-bold hover:bg-[#FDF22F] hover:text-black transition-colors disabled:opacity-50 shrink-0"
                 >
-                    {saving ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
-                    {saving ? 'Saving...' : 'Save Section'}
+                    {saving ? <RefreshCw className="animate-spin" size={14} /> : <Save size={14} />}
+                    <span className="hidden xs:inline">{saving ? 'Saving...' : 'Save Section'}</span>
+                    <span className="xs:hidden">{saving ? '...' : 'Save'}</span>
                 </button>
             </div>
             <div className="p-6 space-y-6">
@@ -35,6 +36,13 @@ export default function SiteEditor() {
     const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+    useEffect(() => {
+        setIsSidebarOpen(false);
+    }, [pathname, searchParams]);
 
     // Section States
     const [heroStats, setHeroStats] = useState({ title: 'Training Hours', value: '1,200+', icon: 'BookOpen' });
@@ -145,25 +153,30 @@ export default function SiteEditor() {
 
     return (
         <div className="min-h-screen bg-[#F5F6FA] flex">
+            <AdminSidebar 
+                user={user} 
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+            />
 
-            {/* Success Toast Configuration */}
-            {toastMessage && (
-                <div className="fixed top-20 right-8 z-50 bg-[#000000] text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
-                    <CheckCircle size={20} />
-                    <span className="font-bold text-sm tracking-wide">{toastMessage}</span>
-                </div>
-            )}
-
-            <AdminSidebar user={user} />
-
-            <div className="flex-1 ml-56 flex flex-col min-h-screen">
-                <header className="bg-white border-b border-gray-100 h-14 px-8 flex items-center justify-between sticky top-0 z-30 shadow-sm">
-                    <div>
+            <div className="flex-1 lg:ml-64 flex flex-col min-h-screen w-full transition-all duration-300">
+                <header className="bg-white border-b border-gray-100 h-16 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-30 shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <button 
+                            onClick={() => setIsSidebarOpen(true)}
+                            className="lg:hidden p-2 -ml-2 text-gray-400 hover:text-[#000000] transition-colors"
+                        >
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="3" y1="12" x2="21" y2="12"></line>
+                                <line x1="3" y1="6" x2="21" y2="6"></line>
+                                <line x1="3" y1="18" x2="21" y2="18"></line>
+                            </svg>
+                        </button>
                         <h1 className="text-gray-800 font-bold text-sm">Site Editor</h1>
                     </div>
                 </header>
 
-                <main className="flex-1 p-8 max-w-5xl mx-auto w-full">
+                <main className="flex-1 p-4 sm:p-8 max-w-5xl mx-auto w-full">
 
                     {/* Hero Mock Dashboard Stats */}
                     <SectionCard
@@ -487,6 +500,13 @@ export default function SiteEditor() {
 
                 </main>
             </div>
+            {/* Success Toast Configuration */}
+            {toastMessage && (
+                <div className="fixed bottom-8 left-1/2 -translate-x-1/2 xs:left-auto xs:right-8 xs:translate-x-0 z-[100] bg-[#000000] text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 border-l-4 border-[#FDF22F] w-[calc(100%-2rem)] xs:w-auto">
+                    <CheckCircle size={20} className="text-brandYellow" />
+                    <span className="font-bold text-sm tracking-wide">{toastMessage}</span>
+                </div>
+            )}
         </div>
     );
 }

@@ -221,7 +221,9 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
             } else if (initialTab === 'Jobs') {
                 // Jobs tab: only fetch jobs — no applicants or requisitions needed here
                 const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
-                const jobsQuery = `/v1/jobs?page=${page}${subTab === 'ACTIVE' ? '&status=active' : '&status=archived'}${searchParam}`;
+                // Default to 'active' if subTab isn't explicitly 'ARCHIVED'
+                const statusQuery = subTab === 'ARCHIVED' ? 'archived' : 'active';
+                const jobsQuery = `/v1/jobs?page=${page}&status=${statusQuery}${searchParam}`;
                 const jobsResponse = await apiFetch(jobsQuery);
                 if (jobsResponse?.data) {
                     setJobs(jobsResponse.data);
@@ -286,10 +288,6 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
     };
 
     useEffect(() => {
-        fetchData(1);
-    }, [initialTab, subTab, search]); // Re-fetch when tab, subtab or search changes
-
-    useEffect(() => {
         // Reset loading and clear data when tab changes to prevent "No Results" flicker
         setLoading(true);
         setJobs(null);
@@ -305,9 +303,12 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
         else if (initialTab === 'Reports') setSubTab('OVERVIEW');
         else if (initialTab === 'Calendar') setSubTab('UPCOMING');
 
-        // Also handles initial load when switching to any other tab
+        // fetchData(1) will be triggered by [initialTab, subTab, search] effect
+    }, [initialTab]);
+
+    useEffect(() => {
         fetchData(1);
-    }, [initialTab]); // Only fires when switching the main tab
+    }, [initialTab, subTab, search]);
 
 
     const handlePostJob = async (req: any) => {
@@ -496,7 +497,7 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                         <p className="text-xs font-bold text-black flex-1">
-                            Showing results for: <span className="font-black">"{search}"</span>
+                            Showing results for: <span className="font-black">&quot;{search}&quot;</span>
                         </p>
                         <button
                             onClick={() => {
@@ -839,9 +840,9 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                                                 {emp.department || '-'}
                                             </td>
                                             <td className="px-8 py-4">
-                                                <span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest ${emp.employment_status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
+                                                <span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest ${emp.employment_status === 'active' ? 'bg-[#FDF22F] text-[#000000] shadow-lg shadow-[#FDF22F]/30 ring-1 ring-[#FDF22F]/50' : 'bg-red-50 text-red-600'
                                                     }`}>
-                                                    {emp.employment_status}
+                                                    {emp.employment_status === 'active' ? '🏆 ' : ''}{emp.employment_status}
                                                 </span>
                                             </td>
                                             <td className="px-8 py-6 text-[13px] text-gray-600">
@@ -888,14 +889,14 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                                                                     alt=""
                                                                     className="w-full h-full object-cover transition-transform duration-500 group-hover/avatar:scale-110"
                                                                     onError={(e) => {
-                                                                        (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(app.name)}&background=1F7A6E&color=fff&bold=true`;
+                                                                        (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(app.name)}&background=FDF22F&color=000&bold=true`;
                                                                     }}
                                                                 />
                                                             ) : (
                                                                 <span className="text-sm font-black text-[#000000]">{app.name.split(' ').map((n: string) => n[0]).join('')}</span>
                                                             )}
                                                         </div>
-                                                        <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white bg-emerald-500 shadow-sm" />
+                                                        <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white bg-[#FDF22F] shadow-sm" />
                                                     </div>
                                                     <div className="space-y-0.5">
                                                         <p className="font-black text-[14px] text-[#000000] tracking-tight group-hover:text-[#000000] transition-colors">{app.name}</p>
@@ -937,13 +938,14 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                                                         })()}
                                                     </span>
                                                 ) : (
-                                                    <span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest ${app.status === 'hired' ? 'bg-emerald-50 text-emerald-600' :
+                                                    <span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest ${app.status === 'hired' ? 'bg-[#FDF22F] text-[#000000] shadow-lg shadow-[#FDF22F]/30 ring-1 ring-[#FDF22F]/50' :
                                                         app.status === 'rejected' ? 'bg-red-50 text-red-600' :
                                                             app.status === 'interview' ? 'bg-purple-50 text-purple-600' :
                                                                 app.status === 'offer' ? 'bg-amber-50 text-amber-600' :
+                                                                    app.status === 'new' ? 'bg-[#FDF22F] text-[#000000] shadow-lg shadow-[#FDF22F]/30 ring-1 ring-[#FDF22F]/50' :
                                                                     'bg-blue-50 text-blue-600'
                                                         }`}>
-                                                        {app.status}
+                                                        {app.status === 'hired' ? '🏆 ' : ''}{app.status}
                                                     </span>
                                                 )}
                                             </td>
@@ -1196,7 +1198,7 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                                             {interview.type}
                                         </td>
                                         <td className="px-8 py-6">
-                                            <span className="px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-sm">
+                                            <span className="px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest bg-[#FDF22F] text-[#000000] shadow-lg shadow-[#FDF22F]/30 ring-1 ring-[#FDF22F]/50">
                                                 Confirmed
                                             </span>
                                         </td>
@@ -2438,9 +2440,9 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                                             <button
                                                 onClick={() => handleStatusUpdate(drawerApp.id, 'hired')}
                                                 disabled={actionLoading}
-                                                className="flex-1 py-5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-emerald-500/30 hover:shadow-2xl hover:-translate-y-0.5 transition-all"
+                                                className="flex-1 py-5 bg-[#FDF22F] text-black rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-[#FDF22F]/20 hover:bg-black hover:text-white hover:-translate-y-0.5 transition-all"
                                             >
-                                                {actionLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" /> : '🏆 Confirm Hire'}
+                                                {actionLoading ? <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin mx-auto" /> : '🏆 Confirm Hire'}
                                             </button>
                                         )}
 
@@ -2455,7 +2457,7 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                                     </>
                                 )}
                                 {drawerApp.status === 'hired' && (
-                                    <div className="flex-1 py-4 bg-emerald-50 text-emerald-600 rounded-2xl text-center font-black text-[10px] uppercase tracking-widest border border-emerald-100">
+                                    <div className="flex-1 py-4 bg-[#FDF22F] text-[#000000] rounded-2xl text-center font-black text-[10px] uppercase tracking-widest border border-[#FDF22F] shadow-lg shadow-[#FDF22F]/30 ring-1 ring-[#FDF22F]/50">
                                         🏆 Active Employee
                                     </div>
                                 )}

@@ -4,15 +4,17 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import React, { useState } from 'react';
 import {
-    LayoutDashboard, FileText, Building2, Briefcase,
-    Users, CalendarClock, Settings, HelpCircle,
-    Image as ImageIcon, ChevronDown, ChevronRight,
-    Globe, ClipboardList, LogOut
+    LayoutDashboard, Building2, Briefcase,
+    Users, CalendarClock, Settings,
+    ChevronDown, ChevronRight,
+    Globe, ClipboardList, X
 } from 'lucide-react';
 
 interface AdminSidebarProps {
     user: any;
     tenants?: any[];
+    isOpen: boolean;
+    onClose: () => void;
 }
 
 interface NavItem {
@@ -28,7 +30,7 @@ const bottomItems = [
     { label: 'Settings', href: '/admin/settings', icon: <Settings size={16} /> },
 ];
 
-export default function AdminSidebar({ user, tenants = [] }: AdminSidebarProps) {
+export default function AdminSidebar({ user, tenants = [], isOpen, onClose }: AdminSidebarProps) {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({ 'Sister Companies': false });
@@ -95,9 +97,18 @@ export default function AdminSidebar({ user, tenants = [] }: AdminSidebarProps) 
     };
 
     return (
-        <aside className="w-56 min-h-screen bg-[#0A0A0A] flex flex-col fixed top-0 left-0 z-50 border-r border-white/5 shadow-2xl">
+        <>
+        {/* Mobile Overlay */}
+        {isOpen && (
+            <div 
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[45] lg:hidden animate-in fade-in duration-300" 
+                onClick={onClose}
+            />
+        )}
+
+        <aside className={`w-64 min-h-screen bg-[#0A0A0A] flex flex-col fixed top-0 left-0 z-50 border-r border-white/5 shadow-2xl transition-transform duration-300 ease-in-out lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
             {/* Header / Logo */}
-            <div className="px-5 py-6 border-b border-white/5">
+            <div className="px-5 py-6 border-b border-white/5 flex items-center justify-between">
                 <Link href="/admin/dashboard" className="flex items-center gap-2.5 group">
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[#000000] text-sm shadow-xl shadow-brandYellow/10 ${isAdmin ? 'bg-brandYellow' : 'bg-brandYellow'}`}>
                         {isAdmin ? 'D' : tenantName.charAt(0)}
@@ -111,6 +122,14 @@ export default function AdminSidebar({ user, tenants = [] }: AdminSidebarProps) 
                         </p>
                     </div>
                 </Link>
+
+                {/* Mobile Close Button */}
+                <button 
+                    onClick={onClose}
+                    className="lg:hidden w-8 h-8 rounded-lg bg-white/5 text-gray-400 flex items-center justify-center hover:text-white transition-colors"
+                >
+                    <X size={18} />
+                </button>
             </div>
 
             {/* Navigation */}
@@ -204,5 +223,6 @@ export default function AdminSidebar({ user, tenants = [] }: AdminSidebarProps) 
                 </div>
             </div>
         </aside>
+        </>
     );
 }
