@@ -24,12 +24,13 @@ class DatabaseSeeder extends Seeder
             'admin' => 'Global Administrator',
             'hr_manager' => 'HR Manager (Approver)',
             'ta_manager' => 'Talent Acquisition Manager',
-            'hiring_manager' => 'Department/Hiring Manager (Requestor)',
+            'hiring_manager' => 'General Manager (GM)',
+            'managing_director' => 'Managing Director (MD)',
             'interviewer' => 'Interviewer',
         ];
 
         foreach ($roles as $slug => $name) {
-            Role::firstOrCreate(['slug' => $slug], [
+            Role::updateOrCreate(['slug' => $slug], [
                 'name' => $name,
             ]);
         }
@@ -52,7 +53,8 @@ class DatabaseSeeder extends Seeder
             $userConfigs = [
                 ['role' => 'ta_manager', 'email_prefix' => 'ta'],
                 ['role' => 'hr_manager', 'email_prefix' => 'hr'],
-                ['role' => 'hiring_manager', 'email_prefix' => 'dm'],
+                ['role' => 'hiring_manager', 'email_prefix' => 'gm'],
+                ['role' => 'managing_director', 'email_prefix' => 'md'],
             ];
 
             foreach ($userConfigs as $config) {

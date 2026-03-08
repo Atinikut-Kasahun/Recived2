@@ -27,10 +27,15 @@ Route::middleware('mock.auth')->group(function () {
             Route::post('/requisitions/bulk-approve', [\App\Http\Controllers\JobRequisitionController::class, 'bulkApprove']);
             Route::post('/requisitions/{id}/duplicate', [\App\Http\Controllers\JobRequisitionController::class, 'duplicate']);
             Route::patch('/requisitions/{id}/status', [\App\Http\Controllers\JobRequisitionController::class, 'updateStatus']);
+            Route::post('/requisitions/{id}/amend', [\App\Http\Controllers\JobRequisitionController::class, 'amend']);
+            Route::post('/requisitions/{id}', [\App\Http\Controllers\JobRequisitionController::class, 'update']);
 
+            Route::apiResource('jobs', \App\Http\Controllers\JobController::class)->except(['store', 'update', 'destroy']);
             Route::get('/jobs', [\App\Http\Controllers\JobPostingController::class, 'index']);
             Route::post('/jobs', [\App\Http\Controllers\JobPostingController::class, 'store']);
-            Route::apiResource('jobs', \App\Http\Controllers\JobController::class)->except(['index', 'show']);
+            Route::patch('/jobs/{id}', [\App\Http\Controllers\JobController::class, 'update']);
+            Route::delete('/jobs/{id}', [\App\Http\Controllers\JobController::class, 'destroy']);
+            Route::post('/jobs/{id}/close', [\App\Http\Controllers\JobPostingController::class, 'close']);
 
             // Applicant Management
             Route::get('/applicants/export', [\App\Http\Controllers\ApplicantController::class, 'export']);
@@ -53,6 +58,8 @@ Route::middleware('mock.auth')->group(function () {
             Route::post('/notifications/{id}/read', [\App\Http\Controllers\NotificationController::class, 'markAsRead']);
             Route::post('/notifications/mark-all-read', [\App\Http\Controllers\NotificationController::class, 'markAllAsRead']);
             Route::post('/notifications/{id}/reply', [\App\Http\Controllers\NotificationController::class, 'reply']);
+            Route::get('/notifications/{id}/download', [\App\Http\Controllers\NotificationController::class, 'downloadAttachment']);
+            Route::post('/notifications/{id}/pin', [\App\Http\Controllers\NotificationController::class, 'togglePin']);
             Route::delete('/notifications/{id}', [\App\Http\Controllers\NotificationController::class, 'destroy']);
 
             Route::get('/users', [\App\Http\Controllers\MessageController::class, 'users']);
@@ -98,8 +105,13 @@ Route::middleware('mock.auth')->group(function () {
         Route::get('/admin/search', [\App\Http\Controllers\GlobalSearchController::class, 'search']);
         Route::get('/admin/users', [\App\Http\Controllers\MessageController::class, 'users']);
         Route::post('/admin/messages/send', [\App\Http\Controllers\MessageController::class, 'send']);
+
+        // Notification attachment inline viewer — auth via ?token= query param (handled by mock.auth)
+        Route::get('/notifications/{id}/view', [\App\Http\Controllers\NotificationController::class, 'viewAttachment']);
     });
 });
+
+
 
 // Public API
 Route::prefix('v1')->group(function () {
@@ -109,26 +121,58 @@ Route::prefix('v1')->group(function () {
     Route::get('/public/jobs/{id}', [\App\Http\Controllers\JobPostingController::class, 'publicShow']);
     Route::post('/apply', [\App\Http\Controllers\JobApplicationController::class, 'store']);
 
+    // Applicant Account (self-service portal)
+    Route::post('/applicant/register', [\App\Http\Controllers\ApplicantAuthController::class, 'register']);
+    Route::post('/applicant/login', [\App\Http\Controllers\ApplicantAuthController::class, 'login']);
+    Route::get('/applicant/me', [\App\Http\Controllers\ApplicantAuthController::class, 'me']);
+    Route::post('/applicant/logout', [\App\Http\Controllers\ApplicantAuthController::class, 'logout']);
+    Route::post('/applicant/forgot-password', [\App\Http\Controllers\ApplicantAuthController::class, 'sendResetLink']);
+    Route::post('/applicant/reset-password', [\App\Http\Controllers\ApplicantAuthController::class, 'resetPassword']);
+    Route::post('/applicant/update', [\App\Http\Controllers\ApplicantAuthController::class, 'updateProfile']);
+    Route::post('/applicant/send-message', [\App\Http\Controllers\ApplicantAuthController::class, 'sendMessage']);
+    Route::get('/applicant/notifications/{id}/attachment', [\App\Http\Controllers\ApplicantAuthController::class, 'downloadNotificationAttachment']);
+
+    // Applicant Notifications
+    Route::get('/applicant/notifications', [\App\Http\Controllers\ApplicantAuthController::class, 'notifications']);
+    Route::post('/applicant/notifications/{id}/read', [\App\Http\Controllers\ApplicantAuthController::class, 'markNotificationRead']);
+    Route::delete('/applicant/notifications/{id}', [\App\Http\Controllers\ApplicantAuthController::class, 'deleteNotification']);
+    Route::post('/applicant/notifications/mark-all-read', [\App\Http\Controllers\ApplicantAuthController::class, 'markAllNotificationsRead']);
+
     // Public Document Access (Simplified for viewing)
     Route::get('/applicants/{id}/resume', function ($id) {
         $applicant = \App\Models\Applicant::findOrFail($id);
         $path = storage_path('app/public/' . $applicant->resume_path);
+
         if (!file_exists($path)) {
-            return response()->json(['error' => 'File not found'], 404);
+            return response()->json(['error' => 'File not found at ' . $path], 404);
         }
+
+        $contentType = 'application/pdf';
+        try {
+            $contentType = \Illuminate\Support\Facades\File::mimeType($path);
+        } catch (\Exception $e) {
+        }
+
         return response()->file($path, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="resume.pdf"',
+            'Content-Type' => $contentType,
+            'Content-Disposition' => 'inline; filename="resume_' . $applicant->id . '.pdf"',
         ]);
     });
 
     Route::get('/attachments/{id}/view', function ($id) {
         $attachment = \App\Models\ApplicantAttachment::findOrFail($id);
         $path = storage_path('app/public/' . $attachment->file_path);
+
         if (!file_exists($path)) {
             return response()->json(['error' => 'File not found'], 404);
         }
-        $contentType = \Illuminate\Support\Facades\File::mimeType($path);
+
+        $contentType = 'application/octet-stream';
+        try {
+            $contentType = \Illuminate\Support\Facades\File::mimeType($path);
+        } catch (\Exception $e) {
+        }
+
         return response()->file($path, [
             'Content-Type' => $contentType,
             'Content-Disposition' => 'inline; filename="' . $attachment->label . '"',

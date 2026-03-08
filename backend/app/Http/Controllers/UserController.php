@@ -131,23 +131,35 @@ class UserController extends Controller
      */
     public function resetPassword(Request $request, $id)
     {
-        $admin = $request->user();
-        $user = User::findOrFail($id);
+        try {
+            $admin = $request->user();
+            if (!$admin) {
+                return response()->json(['message' => 'Unauthenticated'], 401);
+            }
 
-        if (!$admin->hasRole('admin') && $user->tenant_id !== $admin->tenant_id) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            $user = User::findOrFail($id);
+
+            if (!$admin->hasRole('admin') && $user->tenant_id !== $admin->tenant_id) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            $autoPassword = ucfirst(\Illuminate\Support\Str::random(4)) . '-' . \Illuminate\Support\Str::random(4);
+
+            $user->update([
+                'password' => Hash::make($autoPassword),
+            ]);
+
+            return response()->json([
+                'message' => 'Password reset successfully',
+                'generated_password' => $autoPassword
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Backend Error: ' . $e->getMessage(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ], 500);
         }
-
-        $autoPassword = ucfirst(Str::random(4)) . '-' . Str::random(4);
-
-        $user->update([
-            'password' => Hash::make($autoPassword),
-        ]);
-
-        return response()->json([
-            'message' => 'Password reset successfully',
-            'generated_password' => $autoPassword
-        ]);
     }
 
     /**

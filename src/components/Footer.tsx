@@ -13,29 +13,29 @@ export default function Footer() {
     return (
         <footer className="bg-[#FDF22F] pt-16 md:pt-20 pb-10" id="contact">
             <div className="max-w-7xl mx-auto px-6 md:px-8">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-20 pb-12 md:pb-16 border-b border-[#000000]/10">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-20 pb-12 md:pb-16 border-b border-black/10">
                     {/* Brand */}
                     <div className="text-center md:text-left flex flex-col items-center md:items-start">
                         <Link href="/" className="flex flex-col group relative mb-6 md:mb-8">
                             <div className="flex items-center">
-                                <span className="text-[#000000] font-black text-2xl tracking-tighter">
+                                <span className="text-black font-black text-2xl tracking-tighter">
                                     DROGA
                                 </span>
-                                <span className="text-[#000000]/60 font-light text-2xl tracking-normal ml-1.5">
+                                <span className="text-black/60 font-light text-2xl tracking-normal ml-1.5">
                                     GROUP
                                 </span>
                             </div>
                             <div className="flex items-center gap-2 -mt-0.5 justify-center md:justify-start">
-                                <div className="h-[1px] w-3 bg-[#000000]/30" />
-                                <span className="text-[9px] font-bold uppercase tracking-[0.4em] text-[#000000]/60">
+                                <div className="h-[1px] w-3 bg-black/30" />
+                                <span className="text-[9px] font-bold uppercase tracking-[0.4em] text-black/60">
                                     Hiring Hub
                                 </span>
                             </div>
 
                             {/* Hover Effect Underline */}
-                            <div className="absolute -bottom-1 left-0 w-0 h-[1.5px] bg-[#000000] transition-all duration-300 md:group-hover:w-1/2" />
+                            <div className="absolute -bottom-1 left-0 w-0 h-[1.5px] bg-black transition-all duration-300 md:group-hover:w-1/2" />
                         </Link>
-                        <p className="text-[#000000]/50 text-sm font-medium leading-relaxed max-w-56 text-center md:text-left">
+                        <p className="text-black/50 text-sm font-medium leading-relaxed max-w-56 text-center md:text-left">
                             Building the future of quality care, one innovation at a time.
                         </p>
                         <div className="flex gap-3 mt-6 justify-center md:justify-start">
@@ -46,7 +46,7 @@ export default function Footer() {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     whileHover={{ scale: 1.1 }}
-                                    className="w-9 h-9 bg-[#000000]/5 rounded-full flex items-center justify-center text-[#000000] text-xs font-bold hover:bg-[#000000] hover:text-white transition-colors"
+                                    className="w-9 h-9 bg-black/10 rounded-full flex items-center justify-center text-black text-xs font-bold hover:bg-black hover:text-[#FDF22F] transition-colors"
                                 >
                                     {s.id}
                                 </motion.a>
@@ -56,13 +56,13 @@ export default function Footer() {
 
                     {/* Quick Links */}
                     <div className="text-center md:text-left">
-                        <h4 className="font-bold text-[#000000] mb-4 md:mb-6">Quick Links</h4>
+                        <h4 className="font-bold text-black mb-4 md:mb-6">Quick Links</h4>
                         <div className="flex flex-col gap-3 md:gap-4">
                             {quickLinks.map((link) => (
                                 <a
                                     key={link}
                                     href={`#${link.toLowerCase().replace("life at droga", "about-us").replace("about us", "about-us").replace("open positions", "jobs").replace(" ", "-")}`}
-                                    className="text-[#000000]/60 text-sm hover:text-[#000000] transition-colors"
+                                    className="text-black/60 text-sm hover:text-black transition-colors"
                                 >
                                     {link}
                                 </a>
@@ -72,11 +72,11 @@ export default function Footer() {
 
                     {/* Contact */}
                     <div className="text-center md:text-left">
-                        <h4 className="font-bold text-[#000000] mb-4 md:mb-6">Contact</h4>
-                        <div className="flex flex-col gap-3 md:gap-4 text-sm text-[#000000]/60">
-                            <a href="http://www.drogapharma.com/" target="_blank" rel="noopener noreferrer" className="hover:text-[#000000] transition-colors">www.drogapharma.com</a>
-                            <a href="mailto:info@drogapharma.com" className="hover:text-[#000000] transition-colors">info@drogapharma.com</a>
-                            <a href="mailto:pharmadroga@gmail.com" className="hover:text-[#000000] transition-colors">pharmadroga@gmail.com</a>
+                        <h4 className="font-bold text-black mb-4 md:mb-6">Contact</h4>
+                        <div className="flex flex-col gap-3 md:gap-4 text-sm text-black/60">
+                            <a href="http://www.drogapharma.com/" target="_blank" rel="noopener noreferrer" className="hover:text-black transition-colors">www.drogapharma.com</a>
+                            <a href="mailto:info@drogapharma.com" className="hover:text-black transition-colors">info@drogapharma.com</a>
+                            <a href="mailto:pharmadroga@gmail.com" className="hover:text-black transition-colors">pharmadroga@gmail.com</a>
                             <p>+251 91 366 7537</p>
                             <p>
                                 Addis Ketema Subcity, Woreda 06
@@ -89,7 +89,7 @@ export default function Footer() {
                     </div>
                 </div>
 
-                <div className="pt-8 text-center text-sm text-[#000000]/30">
+                <div className="pt-8 text-center text-sm text-black/40">
                     &copy; {new Date().getFullYear()} Droga Group (Hiring Hub). All rights
                     reserved.
                 </div>

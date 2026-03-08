@@ -17,6 +17,10 @@ class TenantScopeMiddleware
 {
     public function handle(Request $request, Closure $next): Response
     {
+        if ($request->isMethod('OPTIONS')) {
+            return $next($request);
+        }
+
         $user = $request->user();
 
         if (!$user) {

@@ -5,10 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Notifications\Notifiable;
 
 class Applicant extends Model
 {
-    use HasFactory;
+    use HasFactory, Notifiable;
 
     protected $fillable = [
         'tenant_id',
@@ -16,6 +17,7 @@ class Applicant extends Model
         'name',
         'email',
         'phone',
+        'headline',
         'age',
         'gender',
         'professional_background',
@@ -23,10 +25,25 @@ class Applicant extends Model
         'resume_path',
         'photo_path',
         'portfolio_link',
-        'status', // new, screening, interview, offered, hired, rejected
+        'status', // new, written_exam, technical_interview, final_interview, offer, hired, rejected
         'source', // website, social media, ethiojobs
         'match_score',
+        'written_exam_score',
+        'technical_interview_score',
+        'interviewer_feedback',
+        'exam_paper_path',
         'feedback',
+        'hired_at',
+        'password',          // applicant portal account password
+        'applicant_token',   // session token for portal auth
+        'password_reset_token',
+        'password_reset_expires_at',
+    ];
+
+    protected $hidden = [
+        'password',
+        'applicant_token',
+        'password_reset_token',
     ];
 
     public function attachments()

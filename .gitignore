@@ -39,3 +39,14 @@ backend/database/*.sqlite-journal
 # Testing
 backend/.phpunit.result.cache
 backend/.phpunit.cache/
+
+# Temporary and local logs
+*.txt
+*.pdf
+public/images/
+tmp/
+.gemini/
+.agents/
+.agent/
+_agents/
+_agent/

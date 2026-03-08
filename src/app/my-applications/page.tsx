@@ -1,0 +1,1709 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { apiFetch, API_URL } from '@/lib/api';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
+import Link from 'next/link';
+
+// ─── Status Config ───────────────────────────────────────────────────────────
+const STATUS_MAP: Record<string, { label: string; color: string; bg: string; icon: string }> = {
+    new: { label: 'Under Review', color: 'text-blue-600', bg: 'bg-blue-50', icon: '👁' },
+    written_exam: { label: 'Written Exam', color: 'text-purple-600', bg: 'bg-purple-50', icon: '📝' },
+    technical_interview: { label: 'Technical Interview', color: 'text-orange-600', bg: 'bg-orange-50', icon: '💻' },
+    final_interview: { label: 'Final Interview', color: 'text-indigo-600', bg: 'bg-indigo-50', icon: '🎯' },
+    offer: { label: 'Offer Extended', color: 'text-emerald-600', bg: 'bg-emerald-50', 'icon': '🏆' },
+    hired: { label: 'Hired! 🎉', color: 'text-black', bg: 'bg-[#FDF22F]', icon: '✅' },
+    rejected: { label: 'Not Selected', color: 'text-red-500', bg: 'bg-red-50', icon: '✕' },
+};
+
+function getStatus(status: string) {
+    return STATUS_MAP[status] || { label: status, color: 'text-gray-500', bg: 'bg-gray-50', icon: '•' };
+}
+
+function timeAgo(date: string) {
+    const d = new Date(date);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffDays === 0) return 'Applied today';
+    if (diffDays === 1) return 'Applied yesterday';
+    return `Applied ${diffDays} days ago`;
+}
+
+function postedAgo(date: string) {
+    if (!date) return 'Posted today';
+    const d = new Date(date);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffDays <= 0) return 'Posted few hours ago';
+    if (diffDays === 1) return 'Posted 1 day ago';
+    return `Posted ${diffDays} days ago`;
+}
+
+// ─── Auth Form Component ─────────────────────────────────────────────────────
+function AuthForm({ mode, onSuccess }: { mode: 'login' | 'register'; onSuccess: (token: string, applicant: any) => void }) {
+    const [form, setForm] = useState({ email: '', password: '', password_confirmation: '', code: '' });
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [successMsg, setSuccessMsg] = useState('');
+    const [resetStep, setResetStep] = useState<'email' | 'code'>('email');
+
+    useEffect(() => {
+        setError('');
+        setSuccessMsg('');
+    }, [mode]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+        setSuccessMsg('');
+
+        try {
+            const cleanBase = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+
+            if (mode === 'login') {
+                const res = await fetch(`${cleanBase}/v1/applicant/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ email: form.email, password: form.password }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.message || 'Authentication failed.');
+                onSuccess(data.token, data.applicant);
+
+            } else if (mode === 'register' && resetStep === 'email') {
+                // Step 1: Request reset code
+                const res = await fetch(`${cleanBase}/v1/applicant/forgot-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ email: form.email }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.message || 'Failed to send reset link.');
+                setSuccessMsg('A 6-digit code has been sent to your email.');
+                setResetStep('code');
+
+            } else if (mode === 'register' && resetStep === 'code') {
+                // Step 2: Confirm reset
+                const res = await fetch(`${cleanBase}/v1/applicant/reset-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(form),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.message || 'Failed to reset password.');
+                onSuccess(data.token, data.applicant);
+            }
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+                <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-sm text-red-600 font-bold">
+                    {error}
+                </div>
+            )}
+            {successMsg && (
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-sm text-emerald-600 font-bold">
+                    {successMsg}
+                </div>
+            )}
+
+            {/* Always show email */}
+            <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Email Address</label>
+                <input
+                    type="email" required
+                    value={form.email}
+                    onChange={e => setForm({ ...form, email: e.target.value })}
+                    disabled={mode === 'register' && resetStep === 'code'}
+                    placeholder="your@email.com"
+                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-[#FDF22F] focus:ring-4 focus:ring-[#FDF22F]/20 font-bold text-gray-800 transition-all disabled:opacity-50"
+                />
+            </div>
+
+            {/* Login fields OR Step 2 of Password Reset fields */}
+            {(mode === 'login' || (mode === 'register' && resetStep === 'code')) && (
+                <>
+                    {mode === 'register' && (
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">6-Digit Code</label>
+                            <input
+                                type="text" required minLength={6} maxLength={6}
+                                value={form.code}
+                                onChange={e => setForm({ ...form, code: e.target.value })}
+                                placeholder="123456"
+                                className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-[#FDF22F] focus:ring-4 focus:ring-[#FDF22F]/20 font-bold text-gray-800 transition-all text-center tracking-[0.3em] text-lg"
+                            />
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
+                            {mode === 'register' ? 'New Password' : 'Password'}
+                        </label>
+                        <input
+                            type="password" required minLength={6}
+                            value={form.password}
+                            onChange={e => setForm({ ...form, password: e.target.value })}
+                            placeholder={mode === 'register' ? 'Min 6 characters' : '••••••••'}
+                            className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-[#FDF22F] focus:ring-4 focus:ring-[#FDF22F]/20 font-bold text-gray-800 transition-all"
+                        />
+                    </div>
+
+                    {mode === 'register' && (
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Confirm New Password</label>
+                            <input
+                                type="password" required minLength={6}
+                                value={form.password_confirmation}
+                                onChange={e => setForm({ ...form, password_confirmation: e.target.value })}
+                                placeholder="••••••••"
+                                className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:border-[#FDF22F] focus:ring-4 focus:ring-[#FDF22F]/20 font-bold text-gray-800 transition-all"
+                            />
+                        </div>
+                    )}
+                </>
+            )}
+
+            <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-4 bg-black text-[#FDF22F] rounded-2xl font-black text-[12px] uppercase tracking-widest hover:bg-[#FDF22F] hover:text-black transition-all transform hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 shadow-xl shadow-black/10 mt-2"
+            >
+                {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : (resetStep === 'email' ? 'Send Reset Code' : 'Save Password & Sign In')}
+            </button>
+
+            {mode === 'register' && resetStep === 'code' && (
+                <button
+                    type="button"
+                    onClick={() => { setResetStep('email'); setError(''); setSuccessMsg(''); }}
+                    className="w-full text-center text-[10px] font-bold text-gray-400 hover:text-black mt-2"
+                >
+                    Didn't receive a code? Try again
+                </button>
+            )}
+        </form>
+    );
+}
+
+// ─── Application Card ────────────────────────────────────────────────────────
+function ApplicationCard({ app }: { app: any }) {
+    const st = getStatus(app.status);
+
+    // Pipeline steps
+    const stages = ['new', 'written_exam', 'technical_interview', 'final_interview', 'offer', 'hired'];
+    const currentIdx = stages.indexOf(app.status);
+    const isRejected = app.status === 'rejected';
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-3xl border border-gray-100 overflow-hidden hover:shadow-xl hover:border-[#FDF22F]/40 transition-all duration-500 group"
+        >
+            <div className="p-8">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-4 mb-6">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#FDF22F]/50 to-[#FDF22F]/10 border border-[#FDF22F]/20 flex items-center justify-center text-2xl shadow-sm">
+                            💼
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-black text-black leading-tight">
+                                {app.job_posting?.title || 'Position Applied'}
+                            </h3>
+                            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
+                                {app.company} · {app.job_posting?.department || 'General'}
+                            </p>
+                        </div>
+                    </div>
+                    <span className={`shrink-0 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${st.bg} ${st.color}`}>
+                        {st.icon} {st.label}
+                    </span>
+                </div>
+
+                {/* Meta */}
+                <div className="flex flex-wrap gap-4 text-[11px] font-bold text-gray-400 mb-6">
+                    {app.job_posting?.location && (
+                        <span className="flex items-center gap-1.5">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                            {app.job_posting.location}
+                        </span>
+                    )}
+                    {app.job_posting?.type && (
+                        <span className="flex items-center gap-1.5">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                            {app.job_posting.type}
+                        </span>
+                    )}
+                    <span className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        {app.created_at ? timeAgo(app.created_at) : ''}
+                    </span>
+                    {app.match_score && (
+                        <span className="flex items-center gap-1.5 text-black font-black">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                            {app.match_score}% Match
+                        </span>
+                    )}
+                </div>
+
+                {/* Pipeline Progress (not shown for rejected) */}
+                {!isRejected && (
+                    <div className="space-y-2">
+                        <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-gray-300">
+                            {stages.map((s, i) => {
+                                const isActive = i === currentIdx;
+                                const isPast = i < currentIdx;
+                                return (
+                                    <span key={s} className={`${isActive ? 'text-black' : isPast ? 'text-[#FDF22F] drop-shadow-sm' : 'text-gray-200'} transition-colors`}>
+                                        {STATUS_MAP[s]?.icon}
+                                    </span>
+                                );
+                            })}
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-[#FDF22F] rounded-full transition-all duration-1000"
+                                style={{ width: `${((currentIdx + 1) / stages.length) * 100}%` }}
+                            />
+                        </div>
+                        <div className="flex justify-between gap-1">
+                            {stages.map((s, i) => {
+                                const stageInfo = STATUS_MAP[s];
+                                const isActive = i === currentIdx;
+                                const isPast = i < currentIdx;
+                                return (
+                                    <span
+                                        key={s}
+                                        className={`text-[8px] font-black uppercase tracking-widest truncate flex-1 text-center ${isActive ? 'text-black' : isPast ? 'text-gray-400' : 'text-gray-200'}`}
+                                    >
+                                        {stageInfo?.label?.replace(' 🎉', '')}
+                                    </span>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* Rejected Message */}
+                {isRejected && (
+                    <div className="bg-red-50 border border-red-100 rounded-2xl px-5 py-4 flex items-center gap-3">
+                        <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center shrink-0">
+                            <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <p className="text-[12px] font-bold text-red-500">
+                            Thank you for applying. After careful consideration, we have decided to move forward with other candidates.
+                        </p>
+                    </div>
+                )}
+            </div>
+        </motion.div>
+    );
+}
+
+export default function MyApplicationsPage() {
+    const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+    const [token, setToken] = useState<string | null>(null);
+    const [applicant, setApplicant] = useState<any>(null);
+    const [applications, setApplications] = useState<any[]>([]);
+    const [availableJobs, setAvailableJobs] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [activeSection, setActiveSection] = useState<'applications' | 'profile' | 'settings' | 'jobs'>('profile');
+
+    // Notifications state
+    const [notifications, setNotifications] = useState<any[]>([]);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [showNotifications, setShowNotifications] = useState(false);
+    const notificationRef = useRef<HTMLDivElement>(null);
+    const [notificationTab, setNotificationTab] = useState<'inbox' | 'message'>('inbox');
+    const [msgApplicationId, setMsgApplicationId] = useState<string>('');
+    const [msgText, setMsgText] = useState('');
+    const [isMsgSending, setIsMsgSending] = useState(false);
+    const [msgStatus, setMsgStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+
+    // Jobs search state
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchLocation, setSearchLocation] = useState('');
+
+    // Dropdown state
+    const [dropdownOpen, setDropdownOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setDropdownOpen(false);
+            }
+            if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+                setShowNotifications(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    // Profile form state
+    const [isProfileSaving, setIsProfileSaving] = useState(false);
+    const [showHelpModal, setShowHelpModal] = useState(false);
+    const [profileForm, setProfileForm] = useState({
+        first_name: '',
+        last_name: '',
+        headline: '',
+        phone: '',
+        age: '' as string | number,
+        gender: '',
+        years_of_experience: '' as string | number,
+        professional_background: '',
+        portfolio_link: '',
+    });
+    const [resumeFile, setResumeFile] = useState<File | null>(null);
+
+    // Load token from localStorage on mount
+    useEffect(() => {
+        const storedToken = localStorage.getItem('applicant_token');
+        if (storedToken) {
+            setToken(storedToken);
+        } else {
+            setLoading(false);
+        }
+    }, []);
+
+    // Fetch profile when token is available
+    const fetchProfile = async () => {
+        if (!token) return;
+        setLoading(true);
+        try {
+            const cleanBase = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+            const res = await fetch(`${cleanBase}/v1/applicant/me`, {
+                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+            });
+            if (!res.ok) {
+                localStorage.removeItem('applicant_token');
+                setToken(null);
+                return;
+            }
+            const data = await res.json();
+            setApplicant(data.applicant);
+            setApplications(data.applications || []);
+
+            if (data.applications?.length > 0) {
+                setMsgApplicationId(data.applications[0].id);
+            }
+
+            // Initialize profile form
+            const splitName = data.applicant.name?.split(' ') || [];
+            setProfileForm({
+                first_name: splitName[0] || '',
+                last_name: splitName.slice(1).join(' ') || '',
+                headline: data.applicant.headline || '',
+                phone: data.applicant.phone || '',
+                age: data.applicant.age || '',
+                gender: data.applicant.gender || '',
+                years_of_experience: data.applicant.years_of_experience || '',
+                professional_background: data.applicant.professional_background || '',
+                portfolio_link: data.applicant.portfolio_link || '',
+            });
+        } catch {
+            localStorage.removeItem('applicant_token');
+            setToken(null);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (token) fetchProfile();
+    }, [token]);
+
+    const fetchNotifications = async () => {
+        if (!token) return;
+        try {
+            const cleanBase = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+            const res = await fetch(`${cleanBase}/v1/applicant/notifications`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setNotifications(data.notifications);
+                setUnreadCount(data.unread_count);
+            }
+        } catch (error) {
+            console.error("Failed to fetch notifications", error);
+        }
+    };
+
+    useEffect(() => {
+        if (token) {
+            fetchNotifications();
+            const interval = setInterval(fetchNotifications, 30000); // Poll every 30s
+            return () => clearInterval(interval);
+        }
+    }, [token]);
+
+    const markAllNotificationsRead = async () => {
+        if (!token) return;
+        try {
+            const cleanBase = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+            await fetch(`${cleanBase}/v1/applicant/notifications/mark-all-read`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            fetchNotifications();
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const markNotificationRead = async (id: string) => {
+        if (!token) return;
+        try {
+            const cleanBase = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+            await fetch(`${cleanBase}/v1/applicant/notifications/${id}/read`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            fetchNotifications();
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const deleteNotification = async (id: string) => {
+        if (!token) return;
+        try {
+            const cleanBase = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+            await fetch(`${cleanBase}/v1/applicant/notifications/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            fetchNotifications();
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const handleSendMessage = async () => {
+        if (!token || !msgApplicationId || !msgText.trim()) return;
+        setMsgStatus(null);
+        setIsMsgSending(true);
+        try {
+            const formData = new FormData();
+            formData.append('application_id', msgApplicationId);
+            formData.append('message', msgText);
+
+            const cleanBase = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+            const res = await fetch(`${cleanBase}/v1/applicant/send-message`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json'
+                },
+                body: formData
+            });
+            if (res.ok) {
+                setMsgStatus({ type: 'success', message: 'Message sent! The TA team will review it shortly.' });
+                setMsgText('');
+                fetchNotifications(); // REFRESH PERSISTENT LIST
+                setTimeout(() => {
+                    setMsgStatus(null);
+                }, 3000);
+            } else {
+                const data = await res.json();
+                setMsgStatus({ type: 'error', message: data.message || "Failed to send message." });
+            }
+        } catch (error) {
+            console.error(error);
+            setMsgStatus({ type: 'error', message: "A technical error occurred. Please try again." });
+        } finally {
+            setIsMsgSending(false);
+        }
+    };
+
+    const handleDownloadNotificationFile = async (notifId: string, fileName: string) => {
+        if (!token) return;
+        try {
+            const cleanBase = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+            const res = await fetch(`${cleanBase}/v1/applicant/notifications/${notifId}/attachment`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                window.open(url, '_blank');
+            } else {
+                alert("Could not download file.");
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const filteredJobs = availableJobs.filter(job => {
+        const matchesQuery = !searchQuery || job.title.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesLocation = !searchLocation || (job.location && job.location.toLowerCase().includes(searchLocation.toLowerCase()));
+        return matchesQuery && matchesLocation;
+    });
+
+    const handleAuthSuccess = (newToken: string, newApplicant: any) => {
+        localStorage.setItem('applicant_token', newToken);
+        setToken(newToken);
+        setApplicant(newApplicant);
+        const splitName = newApplicant.name?.split(' ') || [];
+        setProfileForm({
+            first_name: splitName[0] || '',
+            last_name: splitName.slice(1).join(' ') || '',
+            headline: newApplicant.headline || '',
+            phone: newApplicant.phone || '',
+            age: newApplicant.age || '',
+            gender: newApplicant.gender || '',
+            years_of_experience: newApplicant.years_of_experience || '',
+            professional_background: newApplicant.professional_background || '',
+            portfolio_link: newApplicant.portfolio_link || '',
+        });
+    };
+
+    const handleLogout = async () => {
+        if (token) {
+            const cleanBase = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+            await fetch(`${cleanBase}/v1/applicant/logout`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+            }).catch(() => { });
+        }
+        localStorage.removeItem('applicant_token');
+        setToken(null);
+        setApplicant(null);
+        setApplications([]);
+    };
+
+    const handleSaveProfile = async () => {
+        if (!token) return;
+        setIsProfileSaving(true);
+        try {
+            const cleanBase = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+
+            // Use FormData for file upload
+            const formData = new FormData();
+            Object.entries(profileForm).forEach(([key, value]) => {
+                formData.append(key, String(value));
+            });
+            if (resumeFile) {
+                formData.append('resume', resumeFile);
+            }
+
+            const res = await fetch(`${cleanBase}/v1/applicant/update`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json'
+                },
+                body: formData,
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setApplicant(data.applicant);
+                alert("Profile updated successfully!");
+            } else {
+                const errData = await res.json();
+                alert(errData.message || 'Failed to update profile.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('An error occurred while saving.');
+        } finally {
+            setIsProfileSaving(false);
+        }
+    };
+
+    // ── Loading State ──
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center space-y-4">
+                    <div className="w-12 h-12 border-4 border-black border-t-[#FDF22F] rounded-full animate-spin mx-auto" />
+                    <p className="text-sm font-black text-gray-400 uppercase tracking-widest">Loading your profile...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Not Logged In: Show Auth Page ──
+    if (!token || !applicant) {
+        return (
+            <div className="min-h-screen bg-[#F5F6FA] flex flex-col">
+                <Header />
+                <main className="flex-1 flex items-center justify-center p-6 py-16">
+                    <div className="w-full max-w-[480px] space-y-4">
+
+                        {/* Main Auth Card */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-white rounded-[32px] shadow-2xl shadow-black/5 border border-gray-100 overflow-hidden"
+                        >
+                            {/* Auth Header */}
+                            <div className="bg-black px-10 pt-10 pb-8">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className="w-10 h-10 bg-[#FDF22F] rounded-xl flex items-center justify-center">
+                                        <svg className="w-5 h-5 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">Applicant Portal</span>
+                                        <span className="text-[10px] font-bold text-[#FDF22F]/60">Track your application status in real time</span>
+                                    </div>
+                                </div>
+                                <h1 className="text-2xl font-black text-white">
+                                    {authMode === 'login' ? 'Welcome back 👋' : 'Set Your Password'}
+                                </h1>
+                                <p className="text-sm text-gray-400 font-medium mt-1">
+                                    {authMode === 'login'
+                                        ? 'Sign in with the email and password you created when you applied.'
+                                        : 'Enter the email you applied with and create a password.'}
+                                </p>
+                            </div>
+
+                            {/* Tab Toggle — Sign In | Set Password */}
+                            <div className="flex border-b border-gray-100">
+                                <button
+                                    onClick={() => setAuthMode('login')}
+                                    className={`flex-1 py-4 text-[11px] font-black uppercase tracking-widest transition-all ${authMode === 'login' ? 'text-black border-b-2 border-black' : 'text-gray-300 hover:text-gray-500'}`}
+                                >
+                                    Sign In
+                                </button>
+                                <button
+                                    onClick={() => setAuthMode('register')}
+                                    className={`flex-1 py-4 text-[11px] font-black uppercase tracking-widest transition-all ${authMode === 'register' ? 'text-black border-b-2 border-black' : 'text-gray-300 hover:text-gray-500'}`}
+                                >
+                                    Set Password
+                                </button>
+                            </div>
+
+                            {/* Form */}
+                            <div className="p-10">
+                                {/* Contextual hint */}
+                                {authMode === 'register' && (
+                                    <div className="mb-5 bg-[#FDF22F]/10 border border-[#FDF22F]/30 rounded-2xl px-5 py-4 flex items-start gap-3">
+                                        <svg className="w-4 h-4 text-black mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        <p className="text-[11px] font-bold text-gray-600 leading-relaxed">
+                                            Use this if you already applied for a job and need to set or reset your portal password.
+                                        </p>
+                                    </div>
+                                )}
+
+                                <AuthForm mode={authMode} onSuccess={handleAuthSuccess} />
+
+                                <p className="mt-5 text-center text-[11px] font-bold text-gray-400">
+                                    {authMode === 'login'
+                                        ? <>Password not working? <button onClick={() => setAuthMode('register')} className="text-black font-black hover:underline">Set your password →</button></>
+                                        : <>Already have a password? <button onClick={() => setAuthMode('login')} className="text-black font-black hover:underline">Sign in</button></>
+                                    }
+                                </p>
+
+                                <div className="mt-6 pt-6 border-t border-gray-50">
+                                    <Link href="/careers" className="block text-center text-[10px] font-bold text-gray-300 uppercase tracking-widest hover:text-gray-500 transition-colors">
+                                        ← Back to Job Listings
+                                    </Link>
+                                </div>
+                            </div>
+                        </motion.div>
+
+                        {/* "New here? Apply first" CTA card */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.15 }}
+                            className="bg-black rounded-3xl p-6 flex items-center justify-between gap-4"
+                        >
+                            <div>
+                                <p className="font-black text-white text-sm">First time here?</p>
+                                <p className="text-gray-400 text-[11px] font-medium mt-0.5">
+                                    Apply for a job first. Your account is created automatically during the apply process.
+                                </p>
+                            </div>
+                            <Link
+                                href="/careers"
+                                className="shrink-0 px-5 py-3 bg-[#FDF22F] text-black rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-white transition-all whitespace-nowrap"
+                            >
+                                Apply Now →
+                            </Link>
+                        </motion.div>
+
+                        <p className="text-center text-[10px] font-bold text-gray-300 uppercase tracking-widest">
+                            Secured by Droga Talent Acquisition System
+                        </p>
+                    </div>
+                </main>
+                <Footer />
+            </div>
+        );
+    }
+
+    // ── Logged In: Show Portal ──
+    const navItems = [
+        { id: 'profile', label: 'Your profile' },
+        { id: 'applications', label: 'Applications' },
+        { id: 'jobs', label: 'Jobs for you' },
+        { id: 'settings', label: 'Settings' },
+    ];
+
+    const initials = applicant.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || 'A';
+    const splitName = applicant.name?.split(' ') || [];
+    const firstName = splitName[0] || '';
+    const lastName = splitName.slice(1).join(' ') || '';
+
+    return (
+        <div className="min-h-screen bg-[#F9F9FB] flex flex-col font-sans">
+            {/* Top Navbar */}
+            <nav className="bg-[#FDF22F] relative z-50 shadow-sm border-b border-black/5">
+                <div className="max-w-[1200px] mx-auto px-6 h-[72px] flex items-center justify-between">
+                    <Link href="/" className="flex items-center gap-3 group">
+                        <div className="w-9 h-9 flex items-center justify-center bg-black rounded-lg shadow-sm overflow-hidden border border-white/10 group-hover:scale-105 transition-transform">
+                            <span className="text-[#FDF22F] font-black text-2xl italic tracking-tighter select-none font-serif">D</span>
+                        </div>
+                        <div className="flex flex-col border-l border-black/10 pl-3">
+                            <span className="text-black font-black text-[16px] leading-[0.9] tracking-[0.05em] mb-0.5 group-hover:text-black/70 transition-colors">HIRING HUB</span>
+                            <span className="text-black/40 font-bold text-[8px] uppercase tracking-[0.15em] leading-none group-hover:text-black/60 transition-colors">DROGA GROUP</span>
+                        </div>
+                    </Link>
+
+                    <div className="flex items-center gap-6">
+                        <button
+                            onClick={() => setActiveSection('jobs')}
+                            className="text-black text-[13px] font-bold hover:text-black/70 transition-colors flex items-center gap-2"
+                        >
+                            Search for jobs
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                        </button>
+
+                        <div className="relative" ref={notificationRef}>
+                            <button
+                                onClick={() => setShowNotifications(!showNotifications)}
+                                className="relative p-2 text-black hover:bg-black/5 rounded-full transition-colors"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                                {unreadCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-black text-[#FDF22F] text-[10px] font-black flex items-center justify-center rounded-full border-2 border-[#FDF22F] shadow-lg animate-pulse">
+                                        {unreadCount}
+                                    </span>
+                                )}
+                            </button>
+
+                            <AnimatePresence>
+                                {showNotifications && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        className="absolute right-0 mt-2 w-[400px] bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden z-[100]"
+                                    >
+                                        <div className="px-8 py-6 border-b border-gray-50 flex items-center justify-between bg-gray-50/50">
+                                            <div>
+                                                <h3 className="text-[14px] font-black text-black">Notifications</h3>
+                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Hiring Portal</p>
+                                            </div>
+                                            {unreadCount > 0 && notificationTab === 'inbox' && (
+                                                <button
+                                                    onClick={markAllNotificationsRead}
+                                                    className="px-3 py-1.5 bg-[#FDF22F]/10 border border-[#FDF22F]/30 text-black text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-[#FDF22F] hover:shadow-lg hover:shadow-[#FDF22F]/20 transition-all flex items-center gap-1.5"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                                                    Mark all read
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* Tabs */}
+                                        <div className="flex border-b border-gray-100 bg-gray-50/30">
+                                            <button
+                                                onClick={() => setNotificationTab('inbox')}
+                                                className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${notificationTab === 'inbox' ? 'text-black bg-white' : 'text-gray-400 hover:text-gray-600'}`}
+                                            >
+                                                <div className="flex items-center justify-center gap-2">
+                                                    Inbox
+                                                    {unreadCount > 0 && <span className="w-1.5 h-1.5 bg-black rounded-full" />}
+                                                </div>
+                                            </button>
+                                            <button
+                                                onClick={() => setNotificationTab('message')}
+                                                className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${notificationTab === 'message' ? 'text-black bg-white' : 'text-gray-400 hover:text-gray-600'}`}
+                                            >
+                                                Contact Team
+                                            </button>
+                                        </div>
+
+                                        <div className="max-h-[480px] overflow-y-auto">
+                                            {notificationTab === 'inbox' ? (
+                                                <>
+                                                    {notifications.length > 0 ? (
+                                                        notifications.map((notif) => (
+                                                            <div
+                                                                key={notif.id}
+                                                                onClick={() => markNotificationRead(notif.id)}
+                                                                className={`px-8 py-6 border-b border-gray-50 cursor-pointer transition-all hover:bg-gray-50/80 flex gap-5 ${!notif.read_at ? 'bg-[#FDF22F]/10' : ''}`}
+                                                            >
+                                                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${notif.data.type === 'status_update' ? 'bg-black text-[#FDF22F]' : (notif.data.type === 'sent_message' ? 'bg-gray-100 text-gray-500' : 'bg-[#FDF22F] text-black')}`}>
+                                                                    {notif.data.type === 'status_update' ? (
+                                                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                                    ) : notif.data.type === 'sent_message' ? (
+                                                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                                                                    ) : (
+                                                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex justify-between items-start mb-1.5">
+                                                                        <p className="text-[14px] font-black text-gray-900 leading-tight">{notif.data.title}</p>
+                                                                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-tight ml-2">
+                                                                            {new Date(notif.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                                        </span>
+                                                                    </div>
+                                                                    <p className="text-[13px] text-gray-500 font-medium leading-relaxed mb-3">{notif.data.message}</p>
+
+                                                                    <div className="flex flex-wrap gap-2">
+                                                                        {(notif.data.written_exam_score !== null || notif.data.technical_interview_score !== null) && (
+                                                                            <div className="flex items-center gap-2">
+                                                                                {notif.data.written_exam_score !== null && (
+                                                                                    <div className="flex items-center px-2 py-1 bg-black text-[#FDF22F] text-[9px] font-black rounded-lg uppercase tracking-wider shadow-sm">
+                                                                                        <span className="opacity-50 mr-1.5">Exam:</span> {notif.data.written_exam_score}%
+                                                                                    </div>
+                                                                                )}
+                                                                                {notif.data.technical_interview_score !== null && (
+                                                                                    <div className="flex items-center px-2 py-1 bg-[#FDF22F] text-black text-[9px] font-black rounded-lg uppercase tracking-wider border border-black/5 shadow-sm">
+                                                                                        <span className="opacity-50 mr-1.5">INT:</span> {notif.data.technical_interview_score}%
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
+
+                                                                        {notif.data.interviewer_feedback && (
+                                                                            <div className="w-full mt-1 p-3 bg-gray-50 rounded-xl border border-gray-100/50">
+                                                                                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Feedback from Team</p>
+                                                                                <p className="text-[11px] text-gray-600 font-bold italic">"{notif.data.interviewer_feedback}"</p>
+                                                                            </div>
+                                                                        )}
+
+                                                                        {notif.data.attachment_path && (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleDownloadNotificationFile(notif.id, notif.data.attachment_name || 'attachment');
+                                                                                }}
+                                                                                className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[10px] font-black rounded-lg uppercase tracking-tight transition-colors border border-gray-200"
+                                                                            >
+                                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                                                Download: {notif.data.attachment_name || 'Document'}
+                                                                            </button>
+                                                                        )}
+
+                                                                        <div className="flex gap-3 w-full mt-2">
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    deleteNotification(notif.id);
+                                                                                }}
+                                                                                className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:text-red-500 transition-colors"
+                                                                            >
+                                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                                                Delete
+                                                                            </button>
+                                                                            {notif.data.type === 'mention' && (
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        setNotificationTab('message');
+                                                                                        if (notif.data.applicant_id) {
+                                                                                            setMsgApplicationId(notif.data.applicant_id.toString());
+                                                                                        }
+                                                                                        setMsgText(`Re: ${notif.data.message.substring(0, 30)}... \n\n`);
+                                                                                    }}
+                                                                                    className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:text-[#000000] transition-colors"
+                                                                                >
+                                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+                                                                                    Reply
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <div className="px-10 py-24 text-center">
+                                                            <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                                                                <svg className="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                                                            </div>
+                                                            <h4 className="text-[15px] font-black text-gray-400 uppercase tracking-widest">Inbox Empty</h4>
+                                                            <p className="text-gray-300 text-[11px] font-bold mt-2">You're all caught up!</p>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <div className="p-8">
+                                                    <div className="mb-6">
+                                                        <h4 className="text-[16px] font-black text-black">Send a message</h4>
+                                                        <p className="text-[12px] text-gray-400 font-medium mt-1">Have a question or complaint? Our TA team is here to help.</p>
+                                                    </div>
+
+                                                    <div className="space-y-5">
+                                                        {msgStatus && (
+                                                            <div className={`p-4 rounded-xl border flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300 ${msgStatus.type === 'success' ? 'bg-[#FDF22F]/10 border-[#FDF22F]/30 text-black' : 'bg-red-50 border-red-100 text-red-600'}`}>
+                                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${msgStatus.type === 'success' ? 'bg-black text-[#FDF22F]' : 'bg-red-500 text-white'}`}>
+                                                                    {msgStatus.type === 'success' ? (
+                                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                                                                    ) : (
+                                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-[12px] font-black uppercase tracking-tight">{msgStatus.message}</p>
+                                                            </div>
+                                                        )}
+
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">TO: {applications.find(a => a.id === msgApplicationId)?.company} TA TEAM</label>
+                                                            <div className="p-3 bg-black/5 rounded-xl border border-black/5 mb-3 flex flex-wrap gap-2">
+                                                                {applications.find(a => a.id === msgApplicationId)?.hiring_team?.map((member: any) => (
+                                                                    <div key={member.email} className="flex items-center gap-2 px-2 py-1 bg-white rounded-lg border border-black/10 shadow-sm">
+                                                                        <div className="w-5 h-5 bg-black text-[#FDF22F] rounded-full flex items-center justify-center text-[8px] font-black">
+                                                                            {member.name.charAt(0)}
+                                                                        </div>
+                                                                        <span className="text-[10px] font-black text-gray-700">{member.name}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Your Message</label>
+                                                            <textarea
+                                                                value={msgText}
+                                                                onChange={(e) => setMsgText(e.target.value)}
+                                                                placeholder="Type your message here..."
+                                                                rows={3}
+                                                                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-black font-bold text-[13px] text-gray-700 transition-all resize-none"
+                                                            ></textarea>
+                                                        </div>
+                                                        <button
+                                                            onClick={handleSendMessage}
+                                                            disabled={isMsgSending || !msgText.trim()}
+                                                            className="w-full py-4 bg-black text-[#FDF22F] rounded-2xl font-black text-[12px] uppercase tracking-widest hover:bg-gray-800 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                                        >
+                                                            {isMsgSending ? (
+                                                                <>
+                                                                    <div className="w-4 h-4 border-2 border-[#FDF22F] border-t-transparent rounded-full animate-spin" />
+                                                                    Sending...
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    Send Message
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+                                                                </>
+                                                            )}
+                                                        </button>
+
+                                                        <p className="text-[10px] text-center text-gray-400 font-bold uppercase tracking-wider">
+                                                            A notification will be sent to the company's TA Team
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+
+                        <div className="relative cursor-pointer" ref={dropdownRef}>
+                            <div
+                                onClick={() => setDropdownOpen(!dropdownOpen)}
+                                className="relative group cursor-pointer"
+                            >
+                                <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-black font-black text-[11px] overflow-hidden hover:ring-2 hover:ring-[#FDF22F] transition-shadow">
+                                    {applicant.photo_path ? (
+                                        <img
+                                            src={applicant.photo_path.startsWith('http') ? applicant.photo_path : `${API_URL.split('/api')[0]}/storage/${applicant.photo_path.replace(/^\//, '')}`}
+                                            alt="Profile"
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => {
+                                                (e.target as HTMLImageElement).style.display = 'none';
+                                                (e.target as HTMLImageElement).parentElement!.innerHTML = initials;
+                                            }}
+                                        />
+                                    ) : initials}
+                                </div>
+                                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 border-[2px] border-black rounded-full" />
+                            </div>
+
+                            <AnimatePresence>
+                                {dropdownOpen && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        transition={{ duration: 0.15, ease: 'easeOut' }}
+                                        className="absolute right-0 top-[120%] w-[260px] bg-white rounded-lg shadow-xl shadow-black/10 border border-gray-100 overflow-hidden z-50 py-3"
+                                    >
+                                        <div className="px-6 py-4 border-b border-gray-50 mb-2">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-full bg-[#FDF22F] flex items-center justify-center text-black font-black text-[14px] overflow-hidden border border-gray-100">
+                                                    {applicant.photo_path ? (
+                                                        <img
+                                                            src={applicant.photo_path.startsWith('http') ? applicant.photo_path : `${API_URL.split('/api')[0]}/storage/${applicant.photo_path.replace(/^\//, '')}`}
+                                                            alt="Profile"
+                                                            className="w-full h-full object-cover"
+                                                            onError={(e) => {
+                                                                (e.target as HTMLImageElement).style.display = 'none';
+                                                                (e.target as HTMLImageElement).parentElement!.innerHTML = initials;
+                                                            }}
+                                                        />
+                                                    ) : initials}
+                                                </div>
+                                                <div className="flex flex-col min-w-0">
+                                                    <span className="text-[13px] font-black text-gray-800 truncate uppercase tracking-tight">{applicant.name}</span>
+                                                    <span className="text-[10px] font-bold text-gray-400 truncate">{applicant.email}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => { setActiveSection('profile'); setDropdownOpen(false); }}
+                                            className="w-full flex items-center justify-between px-6 py-2.5 text-left text-[14px] text-gray-700 hover:text-black hover:bg-gray-50 transition-colors"
+                                        >
+                                            Your profile
+                                            <span className="w-2 h-2 bg-emerald-400 rounded-full" />
+                                        </button>
+
+                                        <button
+                                            onClick={() => { setActiveSection('applications'); setDropdownOpen(false); }}
+                                            className="w-full block px-6 py-2.5 text-left text-[14px] text-gray-700 hover:text-black hover:bg-gray-50 transition-colors"
+                                        >
+                                            Applications
+                                        </button>
+
+                                        <button
+                                            onClick={() => { setActiveSection('jobs'); setDropdownOpen(false); }}
+                                            className="w-full block px-6 py-2.5 text-left text-[14px] text-gray-700 hover:text-black hover:bg-gray-50 transition-colors"
+                                        >
+                                            Jobs for you
+                                        </button>
+
+                                        <button
+                                            onClick={() => { setActiveSection('settings'); setDropdownOpen(false); }}
+                                            className="w-full block px-6 py-2.5 text-left text-[14px] text-gray-700 hover:text-black hover:bg-gray-50 transition-colors"
+                                        >
+                                            Settings
+                                        </button>
+
+                                        <div className="h-px bg-gray-100 my-2" />
+
+                                        <button
+                                            onClick={() => { setShowHelpModal(true); setDropdownOpen(false); }}
+                                            className="w-full flex items-center justify-between px-6 py-2.5 text-left text-[14px] text-gray-700 hover:text-black hover:bg-gray-50 transition-colors"
+                                        >
+                                            Need Help?
+                                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                        </button>
+
+                                        <button
+                                            onClick={() => { handleLogout(); setDropdownOpen(false); }}
+                                            className="w-full block px-6 py-2.5 text-left text-[14px] text-gray-700 hover:text-black hover:bg-gray-50 transition-colors"
+                                        >
+                                            Log out
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    </div>
+                </div>
+            </nav >
+
+            {/* Dark Banner Background overlaying main content */}
+            {
+                activeSection !== 'jobs' && (
+                    <div className="bg-[#FDF22F] absolute top-[72px] left-0 right-0 h-40 z-0 border-b border-black/5 shadow-sm" />
+                )
+            }
+
+            <main className={`flex-1 max-w-[1200px] mx-auto w-full px-6 relative z-10 ${activeSection === 'jobs' ? 'pt-6' : 'pt-10'} pb-20`}>
+                <div className="flex gap-8 items-start">
+
+                    {/* Sidebar Card */}
+                    {activeSection !== 'jobs' && (
+                        <aside className="w-[260px] shrink-0 hidden md:block">
+                            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                                <div className="p-8 pb-4 flex flex-col items-center">
+                                    <div className="w-[72px] h-[72px] rounded-full bg-[#FDF22F] flex items-center justify-center text-black font-black text-xl mb-4 overflow-hidden border border-gray-100 shadow-sm relative">
+                                        {applicant.photo_path ? (
+                                            <img
+                                                src={applicant.photo_path.startsWith('http') ? applicant.photo_path : `${API_URL.split('/api')[0]}/storage/${applicant.photo_path.replace(/^\//, '')}`}
+                                                alt="Profile"
+                                                className="w-full h-full object-cover"
+                                                onError={(e) => {
+                                                    (e.target as HTMLImageElement).style.display = 'none';
+                                                    (e.target as HTMLImageElement).parentElement!.innerHTML = initials;
+                                                }}
+                                            />
+                                        ) : initials}
+                                        <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-400 rounded-full border-4 border-white" />
+                                    </div>
+                                    <h2 className="font-bold text-gray-800 text-[13px] uppercase tracking-wide text-center">
+                                        {applicant.name}
+                                    </h2>
+                                </div>
+
+                                <nav className="p-4 space-y-1">
+                                    {navItems.map(item => (
+                                        <button
+                                            key={item.id}
+                                            onClick={() => setActiveSection(item.id as any)}
+                                            className={`w-full text-left px-4 py-2 rounded-md text-[13px] font-medium transition-colors ${activeSection === item.id
+                                                ? 'bg-[#F2F4F7] text-gray-900 border-l-4 border-black pl-3'
+                                                : 'text-gray-600 hover:bg-[#F2F4F7] border-l-4 border-transparent pl-3'}`}
+                                        >
+                                            {item.label}
+                                        </button>
+                                    ))}
+                                    <div className="w-full h-px bg-gray-100 my-4" />
+                                    <button
+                                        onClick={handleLogout}
+                                        className="w-full text-left px-4 py-2 rounded-md text-[13px] font-medium text-gray-600 hover:bg-[#F2F4F7] border-l-4 border-transparent pl-3 transition-colors flex items-center justify-between group"
+                                    >
+                                        Log out
+                                        <svg className="w-4 h-4 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                                    </button>
+                                </nav>
+                            </div>
+                        </aside>
+                    )}
+
+                    {/* Main Content Area */}
+                    <div className="flex-1 min-w-0 pt-3">
+                        {/* Title inside black banner */}
+                        {activeSection !== 'jobs' && (
+                            <h1 className="text-[28px] font-normal text-black mb-12">
+                                {activeSection === 'applications' && 'Applications'}
+                                {activeSection === 'profile' && 'Your profile'}
+                                {activeSection === 'settings' && 'Settings'}
+                            </h1>
+                        )}
+
+                        <AnimatePresence mode="wait">
+                            {/* Applications Tab */}
+                            {activeSection === 'applications' && (
+                                <motion.div key="applications" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
+                                    <p className="text-sm text-gray-900 font-bold mb-4">{applications.length} jobs tracked</p>
+
+                                    {applications.length === 0 ? (
+                                        <div className="bg-white rounded-lg border border-gray-200 p-10 text-center">
+                                            <p className="text-gray-600 mb-4">You haven't applied to any jobs yet.</p>
+                                            <Link href="/careers" className="inline-flex px-6 py-2 bg-black text-white rounded text-sm font-bold hover:bg-gray-800 transition-colors">
+                                                Search jobs
+                                            </Link>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
+                                            {applications.map((app, i) => {
+                                                const st = getStatus(app.status);
+                                                return (
+                                                    <div key={app.id} className="p-6 flex gap-6 hover:bg-[#F9F9FB] transition-colors">
+                                                        <div className="w-12 h-12 bg-black rounded-lg flex items-center justify-center shrink-0">
+                                                            <span className="text-[#FDF22F] font-black text-lg">D</span>
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <h3 className="text-[17px] font-medium text-[#0D625C] mb-1">
+                                                                {app.job_posting?.title || 'Unknown Position'}
+                                                            </h3>
+                                                            <div className="text-[13px] text-gray-500 flex items-center gap-2 flex-wrap">
+                                                                <span className="font-medium text-gray-700">at {app.company}</span>
+                                                                <span>·</span>
+                                                                <span>{app.job_posting?.type || 'Full-time'}</span>
+                                                                <span>·</span>
+                                                                <span>{app.job_posting?.location || 'Addis Ababa'}</span>
+                                                                <span>·</span>
+                                                                <span>{app.job_posting?.department || 'General'}</span>
+                                                            </div>
+                                                            <div className="mt-2 flex items-center gap-3 text-[12px]">
+                                                                <span className="text-gray-400">{timeAgo(app.created_at)}</span>
+                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${st.bg} ${st.color}`}>
+                                                                    {st.label.replace(' 🎉', '')}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </motion.div>
+                            )}
+
+                            {/* Profile Tab */}
+                            {activeSection === 'profile' && (
+                                <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
+
+                                    <div className="bg-[#EAF5F4] border border-[#B3E1E0] rounded-lg p-4 flex justify-between items-start">
+                                        <div>
+                                            <h4 className="text-[15px] font-bold text-gray-900 mb-1">We've updated your profile</h4>
+                                            <p className="text-[13px] text-gray-700">
+                                                To enhance your experience and save you time, make sure your profile details are accurate and up to date.
+                                            </p>
+                                        </div>
+                                        <button className="text-gray-400 hover:text-gray-600"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                                    </div>
+
+                                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                                        <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                                            <h3 className="text-lg font-normal text-gray-900">Personal information</h3>
+                                            <button className="text-sm font-bold text-gray-500 flex items-center gap-1 hover:text-gray-700">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                Clear
+                                            </button>
+                                        </div>
+                                        <div className="p-8 space-y-6">
+                                            <div className="grid grid-cols-2 gap-6">
+                                                <div>
+                                                    <label className="block text-[13px] font-bold text-gray-700 mb-1">
+                                                        <span className="text-red-500 mr-1">*</span>First name
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={profileForm.first_name}
+                                                        onChange={(e) => setProfileForm({ ...profileForm, first_name: e.target.value })}
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:border-black focus:ring-1 focus:ring-black outline-none transition-shadow text-[14px] text-gray-900"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[13px] font-bold text-gray-700 mb-1">
+                                                        <span className="text-red-500 mr-1">*</span>Last name
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={profileForm.last_name}
+                                                        onChange={(e) => setProfileForm({ ...profileForm, last_name: e.target.value })}
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:border-black focus:ring-1 focus:ring-black outline-none transition-shadow text-[14px] text-gray-900"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[13px] font-bold text-gray-700 mb-1">
+                                                    <span className="text-red-500 mr-1">*</span>Email
+                                                </label>
+                                                <input type="email" value={applicant.email} readOnly className="w-full px-3 py-2 border border-gray-300 rounded outline-none text-[14px] text-gray-500 bg-gray-50 border-dashed" />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[13px] font-bold text-gray-700 mb-1">
+                                                    Headline <span className="text-gray-400 font-normal ml-1">(Optional)</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={profileForm.headline}
+                                                    onChange={(e) => setProfileForm({ ...profileForm, headline: e.target.value })}
+                                                    placeholder="e.g. Senior Software Engineer"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:border-black focus:ring-1 focus:ring-black outline-none transition-shadow text-[14px] text-gray-900"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[13px] font-bold text-gray-700 mb-1">
+                                                    Phone
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={profileForm.phone}
+                                                    onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                                                    placeholder="+251 9..."
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:border-black focus:ring-1 focus:ring-black outline-none transition-shadow text-[14px] text-gray-900"
+                                                />
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-6">
+                                                <div>
+                                                    <label className="block text-[13px] font-bold text-gray-700 mb-1">
+                                                        Years of Experience
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        value={profileForm.years_of_experience}
+                                                        onChange={(e) => setProfileForm({ ...profileForm, years_of_experience: e.target.value })}
+                                                        placeholder="e.g. 5"
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:border-black focus:ring-1 focus:ring-black outline-none transition-shadow text-[14px] text-gray-900"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[13px] font-bold text-gray-700 mb-1">
+                                                        Age
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        value={profileForm.age}
+                                                        onChange={(e) => setProfileForm({ ...profileForm, age: e.target.value })}
+                                                        placeholder="e.g. 28"
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:border-black focus:ring-1 focus:ring-black outline-none transition-shadow text-[14px] text-gray-900"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-6">
+                                                <div>
+                                                    <label className="block text-[13px] font-bold text-gray-700 mb-1">
+                                                        Gender
+                                                    </label>
+                                                    <select
+                                                        value={profileForm.gender}
+                                                        onChange={(e) => setProfileForm({ ...profileForm, gender: e.target.value })}
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:border-black focus:ring-1 focus:ring-black outline-none transition-shadow text-[14px] text-gray-900 bg-white"
+                                                    >
+                                                        <option value="">Select Gender</option>
+                                                        <option value="Male">Male</option>
+                                                        <option value="Female">Female</option>
+                                                        <option value="Other">Other</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[13px] font-bold text-gray-700 mb-1">
+                                                        Portfolio Link
+                                                    </label>
+                                                    <input
+                                                        type="url"
+                                                        value={profileForm.portfolio_link}
+                                                        onChange={(e) => setProfileForm({ ...profileForm, portfolio_link: e.target.value })}
+                                                        placeholder="https://..."
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:border-black focus:ring-1 focus:ring-black outline-none transition-shadow text-[14px] text-gray-900"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[13px] font-bold text-gray-700 mb-1">
+                                                    Professional Background
+                                                </label>
+                                                <textarea
+                                                    value={profileForm.professional_background}
+                                                    onChange={(e) => setProfileForm({ ...profileForm, professional_background: e.target.value })}
+                                                    placeholder="Briefly describe your experience and skills..."
+                                                    rows={4}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:border-black focus:ring-1 focus:ring-black outline-none transition-shadow text-[14px] text-gray-900 resize-none"
+                                                />
+                                            </div>
+
+                                            <div className="pt-4 border-t border-gray-100 flex justify-end">
+                                                <button
+                                                    onClick={handleSaveProfile}
+                                                    disabled={isProfileSaving}
+                                                    className="px-8 py-2.5 bg-[#FDF22F] text-black rounded-lg font-black text-[12px] uppercase tracking-widest hover:bg-black hover:text-[#FDF22F] transition-all transform hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 shadow-md shadow-yellow-500/10"
+                                                >
+                                                    {isProfileSaving ? 'Saving...' : 'Save changes'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Resume Section */}
+                                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                                        <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/50">
+                                            <h3 className="text-lg font-normal text-gray-900">Resume</h3>
+                                        </div>
+                                        <div className="p-8 space-y-6">
+                                            {applicant.resume_path && (
+                                                <div className="flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                                                            <svg className="w-6 h-6 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z" /><path d="M3 8a2 2 0 012-2v10h8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" /></svg>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[13px] font-bold text-gray-900">Current Resume</p>
+                                                            <p className="text-[11px] text-gray-400">PDF version uploaded during application</p>
+                                                        </div>
+                                                    </div>
+                                                    <a
+                                                        href={`${API_URL.split('/api')[0]}/storage/${applicant.resume_path}`}
+                                                        target="_blank"
+                                                        className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-[12px] font-bold hover:bg-white hover:shadow-sm transition-all"
+                                                    >
+                                                        View Resume
+                                                    </a>
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <label className="block text-[13px] font-bold text-gray-700 mb-3">Update your resume</label>
+                                                <div className="flex items-center justify-center w-full">
+                                                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition-all">
+                                                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                                            <svg className="w-8 h-8 mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                                                            <p className="text-[12px] text-gray-500">
+                                                                <span className="font-bold">{resumeFile ? resumeFile.name : 'Click to upload'}</span> or drag and drop
+                                                            </p>
+                                                            <p className="text-[10px] text-gray-400 mt-1">PDF Only (MAX. 10MB)</p>
+                                                        </div>
+                                                        <input type="file" className="hidden" accept=".pdf" onChange={(e) => setResumeFile(e.target.files?.[0] || null)} />
+                                                    </label>
+                                                </div>
+                                            </div>
+
+                                            {resumeFile && (
+                                                <div className="flex justify-end">
+                                                    <button
+                                                        onClick={handleSaveProfile}
+                                                        disabled={isProfileSaving}
+                                                        className="px-6 py-2 bg-black text-white rounded font-bold text-[12px] hover:bg-gray-800 transition-all"
+                                                    >
+                                                        {isProfileSaving ? 'Uploading...' : 'Upload New Resume'}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            {/* Jobs for you Tab */}
+                            {activeSection === 'jobs' && (
+                                <motion.div key="jobs" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
+
+                                    {/* Search block mimicking Workable */}
+                                    <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+                                        <div className="flex flex-col md:flex-row gap-4">
+                                            <div className="flex-1 relative">
+                                                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                                                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Job title or keyword"
+                                                    value={searchQuery}
+                                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded focus:border-[#0D625C] focus:ring-1 focus:ring-[#0D625C] outline-none text-[14px]"
+                                                />
+                                            </div>
+                                            <div className="flex-1 relative">
+                                                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                                                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Location"
+                                                    value={searchLocation}
+                                                    onChange={(e) => setSearchLocation(e.target.value)}
+                                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded focus:border-[#0D625C] focus:ring-1 focus:ring-[#0D625C] outline-none text-[14px]"
+                                                />
+                                            </div>
+                                            <button className="px-8 py-2.5 bg-[#FDF22F] text-black rounded font-black text-[14px] uppercase tracking-wider hover:bg-black hover:text-[#FDF22F] transition-all whitespace-nowrap">
+                                                Search jobs
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-[13px] font-medium text-gray-500 mb-4">{filteredJobs.length.toLocaleString()} jobs</p>
+
+                                    {filteredJobs.length === 0 ? (
+                                        <div className="bg-white rounded-lg border border-gray-200 p-10 text-center">
+                                            <p className="text-gray-600 mb-4">No available jobs match your search.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
+                                            {filteredJobs.map((job, i) => (
+                                                <div key={job.id} className="p-6 flex gap-6 hover:bg-[#F9F9FB] transition-colors relative group bg-white">
+                                                    <div className="w-12 h-12 bg-black rounded-lg shadow-sm border border-gray-200 flex items-center justify-center shrink-0">
+                                                        <span className="text-[#FDF22F] font-black text-lg">D</span>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <Link href={`/careers/${job.id}`} className="text-[17px] font-medium text-[#0D625C] mb-1 hover:underline block">
+                                                            {job.title}
+                                                        </Link>
+                                                        <div className="text-[13px] text-gray-500 flex items-center gap-2 flex-wrap mb-2">
+                                                            <span className="font-medium text-gray-700">at {job.company || 'Droga Pharma'}</span>
+                                                            <span>·</span>
+                                                            <span>{job.type || 'Full-time'}</span>
+                                                            <span>·</span>
+                                                            <span>{job.location || 'Addis Ababa'}</span>
+                                                            <span>·</span>
+                                                            <span>{job.department || 'General'}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-3 text-[12px]">
+                                                            <span className="text-gray-400">{postedAgo(job.created_at)}</span>
+                                                            <span className="text-[#f7b944] font-bold flex items-center gap-1 tracking-wide">
+                                                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                                                                Featured
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </motion.div>
+                            )}
+
+                            {/* Settings Tab */}
+                            {activeSection === 'settings' && (
+                                <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
+                                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                                        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                                            <h3 className="text-[15px] font-bold text-gray-900">Account</h3>
+                                        </div>
+                                        <div className="p-6">
+                                            <label className="block text-[13px] font-bold text-gray-700 mb-2">Email</label>
+                                            <div className="relative max-w-sm">
+                                                <input type="text" value={applicant.email} readOnly disabled className="w-full px-3 py-2 border border-gray-300 border-dashed rounded bg-gray-50 text-[14px] text-gray-400 outline-none" />
+                                                <svg className="w-4 h-4 absolute right-3 top-2.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                            </div>
+                                            <p className="text-[11px] text-gray-500 mt-2 max-w-sm">
+                                                You can't change your email because it is used to sign you in and to be contacted by employers.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                                        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                                            <h3 className="text-[15px] font-bold text-gray-900">Personalization</h3>
+                                        </div>
+                                        <div className="p-6 space-y-6">
+                                            <div>
+                                                <p className="text-[13px] font-bold text-gray-900 mb-3">Promote your profile</p>
+                                                <label className="flex items-start gap-3 cursor-pointer">
+                                                    <div className="relative flex items-center justify-center pt-0.5">
+                                                        <input type="checkbox" defaultChecked className="peer w-4 h-4 border-gray-300 rounded text-black focus:ring-black accent-black cursor-pointer" />
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-[13px] font-bold text-gray-900 block">Make your profile visible to recruiters</span>
+                                                        <span className="text-[12px] text-gray-500 block">Allow employers to contact you about relevant jobs.</span>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                                        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                                            <h3 className="text-[15px] font-bold text-gray-900">Delete your account</h3>
+                                        </div>
+                                        <div className="p-6 flex items-center justify-between">
+                                            <p className="text-[13px] text-gray-600 max-w-lg">
+                                                Deleting your account will remove your access to the portal permanently.
+                                            </p>
+                                            <button className="px-4 py-2 border border-red-200 text-red-600 rounded text-[13px] font-bold hover:bg-red-50 transition-colors">
+                                                Delete account
+                                            </button>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+                </div>
+            </main>
+
+            {/* Pro Footer */}
+            <footer className="bg-[#FDF22F] text-black w-full border-t border-black/5">
+                <div className="max-w-[1200px] mx-auto w-full px-6 pt-12 pb-6">
+                    {/* Top Row - Logo */}
+                    <div className="mb-12">
+                        <Link href="/" className="inline-flex items-center gap-3 group">
+                            <div className="w-11 h-11 flex items-center justify-center bg-black rounded-xl shadow-md overflow-hidden border border-white/10 group-hover:scale-105 transition-transform">
+                                <span className="text-[#FDF22F] font-black text-3xl italic tracking-tighter select-none font-serif">D</span>
+                            </div>
+                            <div className="flex flex-col border-l border-black/10 pl-3">
+                                <span className="text-black font-black text-[18px] leading-[0.9] tracking-[0.05em] mb-0.5 uppercase group-hover:text-black/70 transition-colors">HIRING HUB</span>
+                                <span className="text-black/40 font-bold text-[9px] uppercase tracking-[0.15em] leading-none group-hover:text-black/60 transition-colors">DROGA GROUP</span>
+                            </div>
+                        </Link>
+                    </div>
+
+                    {/* Divider & Bottom Links */}
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-6 pt-6 border-t border-black/10 text-[12px] text-black/40 font-medium">
+                        <p>© Droga Talent Acquisition System 2024-{new Date().getFullYear()}</p>
+
+                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                            <button className="hover:text-black transition-colors">Terms & Conditions</button>
+                            <button className="hover:text-black transition-colors">DSA</button>
+                            <button className="hover:text-black transition-colors">Privacy Policy</button>
+                            <button className="hover:text-black transition-colors">Cookie Settings</button>
+                            <button
+                                onClick={() => setShowHelpModal(true)}
+                                className="hover:text-black transition-colors flex items-center gap-1"
+                            >
+                                Need Help?
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </footer>
+
+            <AnimatePresence>
+                {showHelpModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowHelpModal(false)}
+                            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            className="relative w-full max-w-[500px] bg-white rounded-[32px] overflow-hidden shadow-2xl"
+                        >
+                            <div className="bg-black p-10">
+                                <div className="w-12 h-12 bg-[#FDF22F] rounded-2xl flex items-center justify-center mb-6">
+                                    <svg className="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                </div>
+                                <h3 className="text-2xl font-black text-white">How can we help?</h3>
+                                <p className="text-gray-400 text-[14px] mt-2 font-medium">Get in touch with the Droga Group Talent Team</p>
+                            </div>
+
+                            <div className="p-10 space-y-6">
+                                <div className="grid grid-cols-1 gap-4">
+                                    <a href="mailto:info@drogapharma.com" className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:bg-[#FDF22F]/10 hover:border-[#FDF22F] transition-all group">
+                                        <div className="w-10 h-10 bg-white shadow-sm rounded-xl flex items-center justify-center group-hover:bg-[#FDF22F]">
+                                            <svg className="w-5 h-5 text-gray-400 group-hover:text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 01-2 2v10a2 2 0 002 2z" /></svg>
+                                        </div>
+                                        <div>
+                                            <p className="text-[12px] font-black uppercase tracking-widest text-gray-400">Email Support</p>
+                                            <p className="text-[14px] font-bold text-gray-800">info@drogapharma.com</p>
+                                        </div>
+                                    </a>
+
+                                    <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                        <div className="w-10 h-10 bg-white shadow-sm rounded-xl flex items-center justify-center">
+                                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                                        </div>
+                                        <div>
+                                            <p className="text-[12px] font-black uppercase tracking-widest text-gray-400">Phone</p>
+                                            <p className="text-[14px] font-bold text-gray-800">+251 91 366 7537</p>
+                                        </div>
+                                    </div>
+
+                                    <a href="http://www.drogapharma.com" target="_blank" className="flex items-center justify-center w-full py-4 bg-black text-[#FDF22F] rounded-2xl font-black text-[12px] uppercase tracking-widest hover:bg-[#FDF22F] hover:text-black transition-all">
+                                        Visit Help Center
+                                    </a>
+                                </div>
+
+                                <button
+                                    onClick={() => setShowHelpModal(false)}
+                                    className="w-full text-center text-sm font-bold text-gray-400 hover:text-black transition-colors"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+        </div >
+    );
+}

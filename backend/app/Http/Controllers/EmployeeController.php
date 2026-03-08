@@ -30,13 +30,17 @@ class EmployeeController extends Controller
             $query->where('employment_status', $request->status);
         }
 
-        // Search
         if ($request->has('search') && !empty($request->search)) {
             $s = $request->search;
             $query->where(function ($q) use ($s) {
                 $q->where('name', 'like', "%{$s}%")
-                    ->orWhere('email', 'like', "%{$s}%");
+                    ->orWhere('email', 'like', "%{$s}%")
+                    ->orWhere('department', 'like', "%{$s}%");
             });
+        }
+
+        if ($request->has('department') && $request->department !== 'All') {
+            $query->where('department', $request->department);
         }
 
         $perPage = $request->input('per_page', 20);

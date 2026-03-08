@@ -17,6 +17,7 @@ interface Job {
     published_at?: string;
     deadline?: string;
     created_at?: string;
+    description?: string;
     tenant?: { name: string };
 }
 
@@ -27,7 +28,7 @@ function CareersContent() {
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-    const [appStep, setAppStep] = useState(1); // 1: Identity, 2: Resume/Profile, 3: Success
+    const [appStep, setAppStep] = useState(0); // 0: JD, 1: Identity, 2: Resume/Profile, 3: Success
     const [isApplying, setIsApplying] = useState(false);
     const [isGoogleSimulating, setIsGoogleSimulating] = useState(false);
     const [simulatedEmail, setSimulatedEmail] = useState('');
@@ -61,7 +62,7 @@ function CareersContent() {
                     if (jobToApply) {
                         setSelectedJob(jobToApply);
                         setIsApplying(true);
-                        setAppStep(1);
+                        setAppStep(0);
                     }
                 }
             } catch (err) {
@@ -76,7 +77,7 @@ function CareersContent() {
     const handleApplyClick = (job: Job) => {
         setSelectedJob(job);
         setIsApplying(true);
-        setAppStep(1);
+        setAppStep(0);
     };
 
     const handleIdentitySubmit = (e: React.FormEvent) => {
@@ -156,6 +157,47 @@ function CareersContent() {
         }
     };
 
+    const [registerPassword, setRegisterPassword] = useState('');
+    const [registerConfirm, setRegisterConfirm] = useState('');
+    const [registerError, setRegisterError] = useState('');
+    const [registerLoading, setRegisterLoading] = useState(false);
+
+    const handleRegisterAccount = async () => {
+        if (registerPassword !== registerConfirm) {
+            setRegisterError('Passwords do not match.');
+            return;
+        }
+        if (registerPassword.length < 6) {
+            setRegisterError('Password must be at least 6 characters.');
+            return;
+        }
+        setRegisterLoading(true);
+        setRegisterError('');
+        try {
+            const cleanBaseUrl = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+            const res = await fetch(`${cleanBaseUrl}/v1/applicant/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    email: formData.email,
+                    password: registerPassword,
+                    password_confirmation: registerConfirm,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                localStorage.setItem('applicant_token', data.token);
+                setAppStep(4);
+            } else {
+                setRegisterError(data.message || 'Failed to create account.');
+            }
+        } catch {
+            setRegisterError('Network error. Please try again.');
+        } finally {
+            setRegisterLoading(false);
+        }
+    };
+
     const handleSubmitApplication = async () => {
         if (!selectedJob || !resume) return;
         setSubmitting(true);
@@ -183,7 +225,7 @@ function CareersContent() {
             });
 
             if (res.ok) {
-                setAppStep(3);
+                setAppStep(3); // Go to account creation step
             } else {
                 const errorData = await res.json();
                 alert(`Submission failed: ${errorData.message || 'Unknown error'}`);
@@ -215,6 +257,22 @@ function CareersContent() {
                     >
                         We're looking for passionate individuals to help us innovate in the pharmaceutical industry. Discover your next career move below.
                     </motion.p>
+
+                    {/* Applicant Portal CTA — Always visible */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+                        className="flex items-center justify-center gap-3 pt-4"
+                    >
+                        <div className="h-px w-12 bg-gray-200" />
+                        <Link
+                            href="/my-applications"
+                            className="inline-flex items-center gap-2 bg-black text-[#FDF22F] px-6 py-3 rounded-full text-[11px] font-black uppercase tracking-widest hover:bg-[#FDF22F] hover:text-black transition-all shadow-lg shadow-black/10 hover:shadow-[#FDF22F]/30"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            Already Applied? Track Your Application →
+                        </Link>
+                        <div className="h-px w-12 bg-gray-200" />
+                    </motion.div>
                 </div>
             </header>
 
@@ -242,9 +300,17 @@ function CareersContent() {
                                 <div className="space-y-4">
                                     {/* Header Row */}
                                     <div className="flex justify-between items-start">
-                                        <span className="bg-[#FDF22F] text-[9px] font-black text-black px-3 py-1.5 rounded-lg uppercase tracking-widest shadow-sm">
-                                            {job.department || "General"}
-                                        </span>
+                                        <div className="flex flex-col gap-2">
+                                            <span className="bg-[#FDF22F] text-[9px] font-black text-black px-3 py-1.5 rounded-lg uppercase tracking-widest shadow-sm w-fit">
+                                                {job.department || "General"}
+                                            </span>
+                                            {job.tenant?.name && (
+                                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                                    <span className="w-1 h-1 bg-yellow-400 rounded-full" />
+                                                    {job.tenant.name}
+                                                </span>
+                                            )}
+                                        </div>
                                         <span className="text-gray-400 text-[10px] font-bold lowercase opacity-60">
                                             {job.type || "full-time"}
                                         </span>
@@ -268,10 +334,22 @@ function CareersContent() {
                                                 </svg>
                                                 <span className="text-[11px] font-bold text-gray-700 whitespace-nowrap">
                                                     {(() => {
-                                                        const d = new Date(job.published_at || job.created_at || "");
+                                                        const published = job.published_at || job.created_at;
+                                                        if (!published) return 'Posted Recently';
+
+                                                        const pDate = new Date(published);
                                                         const now = new Date();
-                                                        const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-                                                        return diffDays === 0 ? 'Posted Today' : diffDays === 1 ? 'Posted 1 day ago' : `Posted ${diffDays} days ago`;
+
+                                                        // Normalize to start of day for accurate day counting
+                                                        const d1 = new Date(pDate.getFullYear(), pDate.getMonth(), pDate.getDate());
+                                                        const d2 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+                                                        const diffTime = d2.getTime() - d1.getTime();
+                                                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+                                                        if (diffDays <= 0) return 'Posted Today';
+                                                        if (diffDays === 1) return 'Posted Yesterday';
+                                                        return `Posted ${diffDays} days ago`;
                                                     })()}
                                                 </span>
                                             </div>
@@ -282,13 +360,32 @@ function CareersContent() {
                                             </svg>
                                             <span className="text-[11px] font-black text-black/80 whitespace-nowrap">
                                                 {(() => {
-                                                    const d = job.deadline
-                                                        ? new Date(job.deadline)
-                                                        : new Date(new Date(job.published_at || job.created_at || "").getTime() + 30 * 24 * 60 * 60 * 1000);
+                                                    if (!job.deadline) return 'No Deadline Set';
+
+                                                    const dDate = new Date(job.deadline);
                                                     const now = new Date();
-                                                    const diffTime = d.getTime() - now.getTime();
+
+                                                    // Format the exact date
+                                                    const exactDate = dDate.toLocaleDateString('en-US', {
+                                                        month: 'short',
+                                                        day: 'numeric',
+                                                        year: 'numeric'
+                                                    });
+
+                                                    // Normalize to start of day for countdown
+                                                    const d1 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                                                    const d2 = new Date(dDate.getFullYear(), dDate.getMonth(), dDate.getDate());
+
+                                                    const diffTime = d2.getTime() - d1.getTime();
                                                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                                    return diffDays <= 0 ? 'Closes Today' : `Closes in ${diffDays} days`;
+
+                                                    let countdown = '';
+                                                    if (diffDays < 0) countdown = '(Closed)';
+                                                    else if (diffDays === 0) countdown = '(Today)';
+                                                    else if (diffDays === 1) countdown = '(Tomorrow)';
+                                                    else countdown = `(${diffDays} days left)`;
+
+                                                    return `${exactDate} ${countdown}`;
                                                 })()}
                                             </span>
                                         </div>
@@ -323,7 +420,11 @@ function CareersContent() {
                             {/* Modal Header */}
                             <div className="p-8 pb-4 flex justify-between items-center bg-[#F5F6FA]">
                                 <div>
-                                    <p className="text-[10px] font-black text-[#000000] uppercase tracking-widest mb-1">Applying for</p>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+                                        {selectedJob.tenant?.name || 'Droga Pharma'}
+                                        <span className="w-1 h-1 bg-gray-300 rounded-full" />
+                                        {appStep === 0 ? 'Review Opportunity' : 'Application Process'}
+                                    </p>
                                     <h2 className="text-xl font-black text-[#000000]">{selectedJob.title}</h2>
                                 </div>
                                 <button onClick={() => setIsApplying(false)} className="text-gray-400 hover:text-gray-600">
@@ -332,6 +433,44 @@ function CareersContent() {
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-10 space-y-8">
+                                {appStep === 0 && (
+                                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+                                        <section className="bg-gray-50/50 rounded-[32px] p-10 border border-gray-100 shadow-inner relative overflow-hidden">
+                                            {/* Decorative background element */}
+                                            <div className="absolute top-0 right-0 p-10 opacity-[0.03] pointer-events-none">
+                                                <svg className="w-40 h-40 text-black shadow-2xl" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" /></svg>
+                                            </div>
+
+                                            <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-3">
+                                                <span className="w-8 h-px bg-gray-200" />
+                                                Detailed Job Description content
+                                                <span className="w-8 h-px bg-gray-200" />
+                                            </h3>
+
+                                            {selectedJob.description ? (
+                                                <div
+                                                    className="text-sm text-gray-800 leading-relaxed prose prose-sm max-w-none prose-headings:font-black prose-strong:font-black prose-p:mb-4"
+                                                    dangerouslySetInnerHTML={{ __html: selectedJob.description }}
+                                                />
+                                            ) : (
+                                                <div className="py-20 text-center">
+                                                    <p className="text-gray-400 italic">No detailed description provided for this role.</p>
+                                                </div>
+                                            )}
+                                        </section>
+
+                                        <div className="pt-4 sticky bottom-0 bg-white/80 backdrop-blur-sm pb-2 border-t border-gray-50 mt-10">
+                                            <button
+                                                onClick={() => setAppStep(1)}
+                                                className="w-full py-5 bg-black text-[#FDF22F] rounded-2xl font-black text-[13px] uppercase tracking-[0.2em] shadow-2xl shadow-black/10 hover:bg-[#FDF22F] hover:text-black transition-all transform hover:-translate-y-1"
+                                            >
+                                                Apply for this position
+                                            </button>
+                                            <p className="text-center text-[10px] text-gray-400 mt-4 uppercase font-bold tracking-widest">Estimated time: 3 Minutes</p>
+                                        </div>
+                                    </motion.div>
+                                )}
+
                                 {appStep === 1 && (
                                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
                                         <div className="text-center space-y-2">
@@ -473,21 +612,91 @@ function CareersContent() {
                                 )}
 
                                 {appStep === 3 && (
-                                    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="py-12 text-center space-y-6">
-                                        <div className="w-24 h-24 bg-[#FDF22F] rounded-full flex items-center justify-center mx-auto text-black shadow-lg shadow-[#FDF22F]/20">
-                                            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <h3 className="text-3xl font-black text-[#000000] tracking-tight">Application Received!</h3>
-                                            <p className="text-gray-500 font-medium text-lg leading-relaxed max-w-md mx-auto">
-                                                We've received your application for <span className="text-black font-black bg-[#FDF22F]/30 px-2 py-0.5 rounded-md underline decoration-[#FDF22F] decoration-4 underline-offset-4">{selectedJob.title}</span>. Check your email for a confirmation from our team.
+                                    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="space-y-8">
+                                        {/* Success Badge */}
+                                        <div className="text-center space-y-3">
+                                            <div className="w-20 h-20 bg-[#FDF22F] rounded-full flex items-center justify-center mx-auto text-black shadow-lg shadow-[#FDF22F]/30">
+                                                <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                                            </div>
+                                            <h3 className="text-2xl font-black text-[#000000] tracking-tight">Application Submitted!</h3>
+                                            <p className="text-gray-500 font-medium leading-relaxed max-w-sm mx-auto text-sm">
+                                                Your application for <span className="text-black font-black">{selectedJob.title}</span> has been received. Create a free account to track your status.
                                             </p>
                                         </div>
+
+                                        {/* Create Account Form */}
+                                        <div className="bg-black rounded-3xl p-8 space-y-4">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-8 h-8 bg-[#FDF22F] rounded-xl flex items-center justify-center shrink-0">
+                                                    <svg className="w-4 h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                                </div>
+                                                <div>
+                                                    <p className="font-black text-white text-sm">Secure Your Application Portal</p>
+                                                    <p className="text-[10px] text-gray-400 font-bold">Using: {formData.email}</p>
+                                                </div>
+                                            </div>
+
+                                            {registerError && (
+                                                <div className="bg-red-900/20 border border-red-500/20 rounded-xl px-4 py-3 text-xs text-red-400 font-bold">
+                                                    {registerError}
+                                                </div>
+                                            )}
+
+                                            <input
+                                                type="password"
+                                                placeholder="Create a password (min. 6 chars)"
+                                                value={registerPassword}
+                                                onChange={e => setRegisterPassword(e.target.value)}
+                                                className="w-full px-5 py-4 bg-white/5 border border-white/10 text-white rounded-2xl outline-none focus:border-[#FDF22F] font-bold text-sm placeholder:text-gray-600 transition-all"
+                                            />
+                                            <input
+                                                type="password"
+                                                placeholder="Confirm password"
+                                                value={registerConfirm}
+                                                onChange={e => setRegisterConfirm(e.target.value)}
+                                                className="w-full px-5 py-4 bg-white/5 border border-white/10 text-white rounded-2xl outline-none focus:border-[#FDF22F] font-bold text-sm placeholder:text-gray-600 transition-all"
+                                            />
+                                            <button
+                                                onClick={handleRegisterAccount}
+                                                disabled={registerLoading || !registerPassword || !registerConfirm}
+                                                className="w-full py-4 bg-[#FDF22F] text-black rounded-2xl font-black text-[12px] uppercase tracking-widest hover:bg-white transition-all disabled:opacity-50"
+                                            >
+                                                {registerLoading ? 'Creating account...' : 'Create Account & Track Status →'}
+                                            </button>
+                                        </div>
+
                                         <button
                                             onClick={() => setIsApplying(false)}
-                                            className="px-10 py-5 bg-[#FDF22F] text-black rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-[#FDF22F]/20 hover:bg-black hover:text-white transition-all transform hover:-translate-y-1 active:scale-95"
+                                            className="w-full text-center text-[11px] font-bold text-gray-400 hover:text-gray-600 transition-colors"
                                         >
-                                            Return to Careers
+                                            Skip for now — Return to Careers
+                                        </button>
+                                    </motion.div>
+                                )}
+
+                                {appStep === 4 && (
+                                    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="py-8 text-center space-y-6">
+                                        <div className="w-24 h-24 bg-[#FDF22F] rounded-full flex items-center justify-center mx-auto text-black shadow-lg shadow-[#FDF22F]/30 text-4xl">
+                                            🎉
+                                        </div>
+                                        <div className="space-y-2">
+                                            <h3 className="text-3xl font-black text-[#000000] tracking-tight">You're all set!</h3>
+                                            <p className="text-gray-500 font-medium leading-relaxed max-w-sm mx-auto">
+                                                Your account has been created. Track your application status anytime from your personal dashboard.
+                                            </p>
+                                        </div>
+                                        <a
+                                            href="/my-applications"
+                                            className="inline-flex items-center gap-2 px-10 py-5 bg-black text-[#FDF22F] rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:bg-[#FDF22F] hover:text-black transition-all transform hover:-translate-y-1"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                            Go to My Applications
+                                        </a>
+                                        <button
+                                            onClick={() => setIsApplying(false)}
+                                            className="block mx-auto text-[11px] font-bold text-gray-400 hover:text-gray-600 transition-colors"
+                                        >
+                                            Return to Job Listings
                                         </button>
                                     </motion.div>
                                 )}
@@ -514,7 +723,7 @@ function CareersContent() {
                                 <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" className="w-12 h-12 mx-auto" />
                                 <div className="space-y-1">
                                     <h3 className="text-xl font-black text-[#000000]">Sign in with Google</h3>
-                                    <p className="text-xs text-gray-500 font-medium tracking-tight">to continue to Droga Hiring Hub</p>
+                                    <p className="text-xs text-gray-500 font-medium tracking-tight">to continue to {selectedJob?.tenant?.name || 'Hiring Hub'}</p>
                                 </div>
                             </div>
 

@@ -1,15 +1,18 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8081/api";
+const defaultHost = "localhost";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || `http://${defaultHost}:8081/api`;
 
-export async function apiFetch(endpoint: string, options: RequestInit = {}) {
+
+
+export async function apiFetch(endpoint: string, options: RequestInit = {}, returnBlob: boolean = false) {
     const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
 
     const headers: Record<string, string> = {
-        "Accept": "application/json",
+        "Accept": returnBlob ? "*/*" : "application/json",
         ...(token ? { "Authorization": `Bearer ${token}` } : {}),
     };
 
-    // Only set Content-Type for JSON body – not for FormData
-    if (!(options.body instanceof FormData)) {
+    // Only set Content-Type for JSON body – not for FormData – and only if there's a body at all
+    if (options.body && !(options.body instanceof FormData)) {
         headers["Content-Type"] = "application/json";
     }
 
@@ -21,16 +24,19 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     // Robust URL construction
     const baseUrl = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const finalUrl = `${baseUrl}${cleanEndpoint}`;
 
     let response: Response;
     try {
-        response = await fetch(`${baseUrl}${cleanEndpoint}`, {
+        console.log(`[apiFetch] Requesting: ${finalUrl}`, options);
+        response = await fetch(finalUrl, {
             ...options,
             headers,
         });
-    } catch (networkError) {
-        // Backend unreachable – throw a clean, user-friendly error
-        throw new Error("Unable to connect to the server. Please make sure the backend is running.");
+    } catch (networkError: any) {
+        // Backend unreachable or CORS error – show more detail
+        console.error("Network Fetch Error:", networkError);
+        throw new Error(`Connection Failed: ${networkError.message || 'The backend might be down or blocking the request.'}`);
     }
 
     if (!response.ok) {
@@ -41,6 +47,8 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
         } catch { /* body not JSON */ }
         throw new Error(errorMessage);
     }
+
+    if (returnBlob) return response.blob();
 
     // Some endpoints return 204 No Content
     const contentType = response.headers.get("Content-Type") || "";
@@ -59,3 +67,8 @@ export const auth = {
     logout: () => apiFetch("/logout", { method: "POST" }),
     me: () => apiFetch("/user"),
 };
+
+// Keep for compatibility but use the enhanced apiFetch internally
+export async function apiFetchBlob(endpoint: string) {
+    return apiFetch(endpoint, { method: 'GET' }, true);
+}

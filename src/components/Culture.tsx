@@ -30,7 +30,8 @@ export default function Culture({ settings }: { settings?: any }) {
         }
         if (settings?.site_culture_images) {
             const cImages = settings.site_culture_images;
-            setCultureImages(typeof cImages === 'string' ? JSON.parse(cImages) : cImages);
+            const parsed = typeof cImages === 'string' ? JSON.parse(cImages) : cImages;
+            setCultureImages(prev => ({ ...prev, ...parsed }));
         }
         if (settings?.site_team_diversity) {
             const diversity = settings.site_team_diversity;
@@ -39,9 +40,11 @@ export default function Culture({ settings }: { settings?: any }) {
     }, [settings]);
 
     const getImageUrl = (path: string, fallback: string) => {
-        if (!path) return fallback;
+        if (!path || path === "") return fallback;
         if (path.startsWith('http')) return path;
-        return `${API_URL.split('/api')[0]}/storage/${path}`;
+        const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+        const baseUrl = API_URL.split('/api')[0];
+        return `${baseUrl}/storage/${cleanPath}`;
     };
 
     return (
@@ -125,7 +128,7 @@ export default function Culture({ settings }: { settings?: any }) {
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: false, amount: 0.2 }}
                         transition={{ duration: 0.6 }}
-                        className="bg-[#FDF22F] rounded-3xl md:rounded-[40px] p-4 md:p-6 shadow-[0_10px_50px_-12px_rgba(0,0,0,0.12)] transition-all duration-500 relative overflow-hidden border-none hover:shadow-[0_20px_70px_-15px_rgba(0,0,0,0.15)]"
+                        className="bg-[#FDF22F] rounded-3xl md:rounded-[40px] p-4 md:p-6 shadow-none hover:shadow-[0_20px_70px_-15px_rgba(0,0,0,0.12)] transition-all duration-500 relative overflow-hidden border-none"
                     >
                         <div className="flex items-center justify-between mb-4 md:mb-6">
                             <div>

@@ -113,6 +113,7 @@ class JobController extends Controller
             'title' => 'sometimes|string|max:255',
             'description' => 'sometimes|string',
             'status' => 'sometimes|in:active,closed,draft',
+            'deadline' => 'nullable|date',
         ]);
 
         $job->update($request->all());

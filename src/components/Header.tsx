@@ -10,6 +10,8 @@ export default function Header() {
 
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+    const [applicantToken, setApplicantToken] = useState<string | null>(null);
+
     useEffect(() => {
         const storedUser = localStorage.getItem("user");
         if (storedUser) {
@@ -19,6 +21,8 @@ export default function Header() {
                 console.error("Failed to parse user", e);
             }
         }
+        const appToken = localStorage.getItem('applicant_token');
+        setApplicantToken(appToken);
 
         const handleScroll = () => setScrolled(window.scrollY > 50);
         window.addEventListener("scroll", handleScroll);
@@ -108,12 +112,38 @@ export default function Header() {
                                     </button>
                                 </div>
                             ) : (
-                                <Link
-                                    href="/login"
-                                    className="text-[13px] font-bold tracking-wider text-[#000000]/80 hover:text-black hover:bg-[#FDF22F] px-4 py-2 rounded-lg transition-all ml-4 border-l border-[#000000]/10"
-                                >
-                                    Login
-                                </Link>
+                                <div className="flex items-center gap-3 pl-4 border-l border-[#000000]/10">
+                                    {/* Premium Track Application CTA */}
+                                    <Link
+                                        href="/my-applications"
+                                        className="group relative flex items-center gap-2.5 bg-[#FDF22F] hover:bg-black text-black hover:text-[#FDF22F] pl-2 pr-5 py-2 rounded-full font-black text-[11px] uppercase tracking-widest transition-all duration-300 shadow-lg shadow-[#FDF22F]/40 hover:shadow-black/20 hover:-translate-y-0.5 active:scale-95"
+                                    >
+                                        {/* Avatar circle */}
+                                        <div className="relative w-7 h-7 rounded-full bg-black group-hover:bg-[#FDF22F] flex items-center justify-center shrink-0 transition-colors duration-300">
+                                            {applicantToken ? (
+                                                <span className="text-[#FDF22F] group-hover:text-black font-black text-[11px] transition-colors duration-300">●</span>
+                                            ) : (
+                                                <svg className="w-3.5 h-3.5 text-[#FDF22F] group-hover:text-black transition-colors duration-300" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
+                                            )}
+                                            {/* Pulsing green live dot */}
+                                            <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border-2 border-[#FDF22F] group-hover:border-black transition-colors duration-300"></span>
+                                            </span>
+                                        </div>
+                                        <span className="whitespace-nowrap">
+                                            {applicantToken ? 'My Applications' : 'Track Application'}
+                                        </span>
+                                        <svg className="w-3 h-3 opacity-60 group-hover:translate-x-0.5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" /></svg>
+                                    </Link>
+
+                                    <Link
+                                        href="/login"
+                                        className="text-[12px] font-bold tracking-wider text-[#000000]/50 hover:text-black transition-colors"
+                                    >
+                                        Staff Login
+                                    </Link>
+                                </div>
                             )}
                         </div>
 
@@ -191,32 +221,43 @@ export default function Header() {
 
                     <div className="h-px w-full bg-[#000000]/5 my-4" />
 
-                        {user ? (
-                            <>
-                                <Link
-                                    href="/dashboard"
-                                    onClick={() => setIsMenuOpen(false)}
-                                    className="text-xl font-bold text-[#000000]"
-                                >
-                                    Dashboard
-                                </Link>
-                                <button
-                                    onClick={handleLogout}
-                                    className="text-xl font-bold text-red-500 text-left"
-                                >
-                                    Logout
-                                </button>
-                            </>
-                        ) : (
+                    {user ? (
+                        <>
+                            <Link
+                                href="/dashboard"
+                                onClick={() => setIsMenuOpen(false)}
+                                className="text-xl font-bold text-[#000000]"
+                            >
+                                Dashboard
+                            </Link>
+                            <button
+                                onClick={handleLogout}
+                                className="text-xl font-bold text-red-500 text-left"
+                            >
+                                Logout
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            {/* Always visible applicant portal link */}
+                            <Link
+                                href="/my-applications"
+                                onClick={() => setIsMenuOpen(false)}
+                                className="flex items-center gap-3 text-xl font-bold text-[#000000] tracking-tighter hover:bg-[#FDF22F] -mx-4 px-4 py-3 rounded-xl transition-colors"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                {applicantToken ? 'My Applications' : 'Track Application'}
+                            </Link>
                             <Link
                                 href="/login"
                                 onClick={() => setIsMenuOpen(false)}
-                                className="text-2xl font-bold text-[#000000] tracking-tighter"
+                                className="text-2xl font-bold text-[#000000]/40 tracking-tighter"
                             >
-                                Login
+                                Staff Login
                             </Link>
-                        )}
-                    </div>
+                        </>
+                    )}
+                </div>
 
                 <div className="mt-auto flex flex-col items-center">
                     {/* Thumb Zone Close Button */}
@@ -229,7 +270,7 @@ export default function Header() {
                             <line x1="6" y1="6" x2="18" y2="18"></line>
                         </svg>
                     </button>
-                    
+
                     <div className="w-full pt-6 border-t border-[#000000]/5 flex justify-between items-center text-[10px] font-bold text-[#000000]/20 uppercase tracking-[0.2em]">
                         <span>Droga Group Hiring Hub</span>
                         <span>© 2026</span>

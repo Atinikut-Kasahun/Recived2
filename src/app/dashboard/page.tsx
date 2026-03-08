@@ -77,7 +77,7 @@ function DashboardContent() {
                     <TADashboard user={user} activeTab={activeTab} onLogout={handleLogout} />
                 ) : roleSlug === 'hiring_manager' ? (
                     <DeptManagerDashboard user={user} activeTab={activeTab} onLogout={handleLogout} />
-                ) : roleSlug === 'hr_manager' ? (
+                ) : roleSlug === 'hr_manager' || roleSlug === 'managing_director' ? (
                     <HRManagerDashboard user={user} activeTab={activeTab} onLogout={handleLogout} />
                 ) : (
                     <TADashboard user={user} activeTab={activeTab} onLogout={handleLogout} />

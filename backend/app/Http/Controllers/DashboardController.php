@@ -209,8 +209,13 @@ class DashboardController extends Controller
     /**
      * Global Admin: aggregated reports with Time-to-Hire per company.
      */
-    public function reportsData(): JsonResponse
+    public function reportsData(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if (!$user->hasRole('admin')) {
+            return response()->json(['error' => 'Unauthorized access to cross-company reports.'], 403);
+        }
+
         $driver = \Illuminate\Support\Facades\DB::connection()->getDriverName();
         $dateDiffRaw = $driver === 'sqlite'
             ? 'AVG(julianday(applicants.updated_at) - julianday(applicants.created_at)) as avg_days'

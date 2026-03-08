@@ -40,8 +40,34 @@ class JobPostingController extends Controller
             });
         }
 
-        if ($request->has('status') && $request->status) {
-            $query->where('status', $request->status);
+        if ($request->has('position') && $request->position) {
+            $query->where('title', 'LIKE', '%' . $request->position . '%');
+        }
+
+        if ($request->has('location') && $request->location && $request->location !== 'All') {
+            $query->where('location', 'LIKE', '%' . $request->location . '%');
+        }
+
+        if ($request->has('department') && $request->department && $request->department !== 'All') {
+            $query->where(function ($q) use ($request) {
+                $q->where('department', $request->department)
+                    ->orWhereHas('requisition', function ($sq) use ($request) {
+                        $sq->where('department', $request->department);
+                    });
+            });
+        }
+
+        if ($request->has('status') && $request->status && $request->status !== 'All') {
+            if ($request->status === 'ACTIVE' || $request->status === 'active') {
+                $query->where('status', 'active');
+            } else if ($request->status === 'ARCHIVED' || $request->status === 'closed') {
+                $query->where('status', 'closed');
+            } else {
+                $query->where('status', strtolower($request->status));
+            }
+        } else if ($request->has('status') && $request->status) {
+            // fallback logic
+            $query->where('status', strtolower($request->status));
         }
 
         $perPage = $request->input('per_page', 10);
@@ -138,6 +164,11 @@ class JobPostingController extends Controller
      */
     public function indexGlobal(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if (!$user->role_slug === 'admin' && !$user->hasRole('admin')) {
+            return response()->json(['error' => 'Global analytical access is restricted to system administrators.'], 403);
+        }
+
         $query = JobPosting::with(['tenant', 'requisition'])
             ->withCount('applicants');
 
@@ -159,5 +190,23 @@ class JobPostingController extends Controller
 
         $perPage = $request->input('per_page', 10);
         return response()->json($query->orderBy('created_at', 'desc')->paginate($perPage));
+    }
+
+    /**
+     * Manually close a job posting.
+     */
+    public function close(Request $request, string $id): JsonResponse
+    {
+        $user = $request->user();
+        $job = JobPosting::findOrFail($id);
+
+        // Security check
+        if (!$user->hasRole('admin') && $job->tenant_id !== $user->tenant_id) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $job->update(['status' => 'closed']);
+
+        return response()->json(['message' => 'Job closed successfully', 'job' => $job]);
     }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiFetch } from '@/lib/api';
@@ -32,6 +32,8 @@ interface Requisition {
     location: string;
     status: string;
     description: string | null;
+    jd_content?: string;
+    amendment_comment?: string;
     created_at: string;
 }
 
@@ -44,6 +46,7 @@ const INITIAL_FORM_DATA = {
     budget: 0,
     position_type: 'new',
     description: '',
+    jd_content: '',
 };
 
 export default function DeptManagerDashboard({ user, activeTab: initialTab, onLogout }: { user: any; activeTab: string; onLogout: () => void }) {
@@ -52,8 +55,10 @@ export default function DeptManagerDashboard({ user, activeTab: initialTab, onLo
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [wizardStep, setWizardStep] = useState(1);
     const [formData, setFormData] = useState(INITIAL_FORM_DATA);
-    const [jdFile, setJdFile] = useState<File | null>(null); // New state for file
+    const jdContentRef = useRef<HTMLDivElement>(null);
+    const [jdFile, setJdFile] = useState<File | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [editingReqId, setEditingReqId] = useState<number | null>(null);
     const [jobs, setJobs] = useState<any[] | null>(null);
     const [jobsMeta, setJobsMeta] = useState<any>(null);
     const [reqsMeta, setReqsMeta] = useState<any>(null);
@@ -123,22 +128,43 @@ export default function DeptManagerDashboard({ user, activeTab: initialTab, onLo
                 fd.append('jd_file', jdFile);
             }
 
-            await apiFetch('/v1/requisitions', {
+            fd.append('jd_content', formData.jd_content);
+
+            await apiFetch(editingReqId ? `/v1/requisitions/${editingReqId}` : '/v1/requisitions', {
                 method: 'POST',
-                // Note: when using FormData, do NOT set Content-Type header
                 body: fd,
             });
             setDrawerOpen(false);
             setWizardStep(1);
             setFormData(INITIAL_FORM_DATA);
             setJdFile(null); // Clear file after submission
-            showToast('Requisition Created Successfully!');
+            setEditingReqId(null);
+            showToast(editingReqId ? 'Requisition Updated Successfully!' : 'Requisition Created Successfully!');
             fetchData();
         } catch (e) {
             console.error(e);
         } finally {
             setSubmitting(false);
         }
+    };
+
+    const handleEdit = (req: Requisition) => {
+        setEditingReqId(req.id);
+        setFormData({
+            title: req.title || '',
+            department: req.department || '',
+            location: req.location || '',
+            headcount: req.headcount || 1,
+            priority: req.priority || 'medium',
+            budget: req.budget || 0,
+            position_type: req.position_type || 'new',
+            description: req.description || '',
+            jd_content: req.jd_content || '',
+            amendment_comment: req.amendment_comment,
+        } as any);
+        setJdFile(null);
+        setWizardStep(2); // Changed from 4 to 2, assuming 2 steps
+        setDrawerOpen(true);
     };
 
     const handleDuplicate = async (id: number) => {
@@ -149,6 +175,13 @@ export default function DeptManagerDashboard({ user, activeTab: initialTab, onLo
             console.error(e);
         }
     };
+
+    // Effect to update contentEditable div when formData.jd_content changes
+    useEffect(() => {
+        if (drawerOpen && jdContentRef.current && jdContentRef.current.innerHTML !== formData.jd_content) {
+            jdContentRef.current.innerHTML = formData.jd_content;
+        }
+    }, [formData.jd_content, drawerOpen]);
 
     return (
         <div className="space-y-6 pb-20">
@@ -196,7 +229,7 @@ export default function DeptManagerDashboard({ user, activeTab: initialTab, onLo
 
                 {localTab === 'HIRING PLAN' && (
                     <button
-                        onClick={() => setDrawerOpen(true)}
+                        onClick={() => { setEditingReqId(null); setFormData(INITIAL_FORM_DATA); setDrawerOpen(true); }}
                         className="bg-[#FDF22F] hover:bg-black text-[#000000] hover:text-[#FDF22F] px-8 py-3.5 rounded-2xl font-black text-[13px] tracking-widest uppercase shadow-xl shadow-[#FDF22F]/10 transition-all flex items-center gap-2 group"
                     >
                         <svg className="w-4 h-4 transition-transform group-hover:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg>
@@ -277,7 +310,7 @@ export default function DeptManagerDashboard({ user, activeTab: initialTab, onLo
                             <table className="w-full text-left">
                                 <thead className="bg-[#F9FAFB] border-b border-gray-100">
                                     <tr>
-                                        {['REQUISITION', 'HIRING MANAGER', 'LOCATION', 'SALARY', 'SUBMITTED ON', 'POSTED TO PORTAL', 'STATUS'].map(h => (
+                                        {['REQUISITION', 'GENERAL MANAGER (GM)', 'LOCATION', 'SALARY', 'SUBMITTED ON', 'POSTED TO PORTAL', 'STATUS'].map(h => (
                                             <th key={h} className="px-8 py-4 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
                                         ))}
                                     </tr>
@@ -352,17 +385,29 @@ export default function DeptManagerDashboard({ user, activeTab: initialTab, onLo
                                             <td className="px-8 py-6">
                                                 <div className="flex items-center justify-between gap-4">
                                                     <span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest ${req.status === 'approved' ? 'bg-emerald-50 text-emerald-600' :
-                                                        req.status === 'pending' ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-500'
+                                                        req.status === 'amendment_required' ? 'bg-amber-50 text-amber-600' :
+                                                            (req.status === 'pending_md' || req.status === 'pending_hr') ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-500'
                                                         }`}>
-                                                        {req.status}
+                                                        {req.status.replace('_', ' ')}
                                                     </span>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleDuplicate(req.id); }}
-                                                        className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-[#000000] transition-all"
-                                                        title="Duplicate"
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
-                                                    </button>
+                                                    <div className="flex gap-2">
+                                                        {(req.status === 'amendment_required' || req.status === 'pending_md') && (
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleEdit(req); }}
+                                                                className="opacity-0 group-hover:opacity-100 p-1.5 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition-all"
+                                                                title="Edit / Amend"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleDuplicate(req.id); }}
+                                                            className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-[#000000] transition-all"
+                                                            title="Duplicate"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </td>
                                         </tr>
@@ -413,7 +458,7 @@ export default function DeptManagerDashboard({ user, activeTab: initialTab, onLo
                         >
                             <div className="p-8 border-b border-gray-100 flex justify-between items-center">
                                 <div>
-                                    <h2 className="text-2xl font-black text-[#000000]">New Requisition</h2>
+                                    <h2 className="text-2xl font-black text-[#000000]">{editingReqId ? 'Edit Requisition' : 'New Requisition'}</h2>
                                     <div className="flex items-center gap-2 mt-2">
                                         <div className="w-24 h-1 bg-gray-100 rounded-full overflow-hidden">
                                             <div className="h-full bg-[#FDF22F] transition-all duration-500 shadow-[0_0_8px_rgba(253,242,47,0.6)]" style={{ width: wizardStep === 1 ? '50%' : '100%' }} />
@@ -427,13 +472,24 @@ export default function DeptManagerDashboard({ user, activeTab: initialTab, onLo
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                                {(formData as any).amendment_comment && editingReqId && (
+                                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 shadow-sm">
+                                        <div className="flex items-center gap-2 text-amber-700 mb-2">
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                            <h4 className="text-[11px] font-black uppercase tracking-widest">Required Amendment Feedback</h4>
+                                        </div>
+                                        <p className="text-sm font-medium text-amber-900 leading-relaxed bg-white/50 p-4 rounded-lg">
+                                            {(formData as any).amendment_comment}
+                                        </p>
+                                    </div>
+                                )}
                                 {wizardStep === 1 ? (
                                     <div className="space-y-6">
                                         <section className="space-y-4">
                                             <h3 className="text-[11px] font-black text-[#000000] uppercase tracking-widest">Job Details</h3>
                                             <div className="space-y-4">
                                                 <div>
-                                                    <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1.5 leading-none">Job Title</label>
+                                                    <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1.5 leading-none">Job Title <span className="text-red-500">* Required</span></label>
                                                     <input
                                                         type="text"
                                                         className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-[#FDF22F]/20 focus:border-[#FDF22F] transition-all text-sm font-bold text-[#000000]"
@@ -443,7 +499,7 @@ export default function DeptManagerDashboard({ user, activeTab: initialTab, onLo
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1.5 leading-none">Department</label>
+                                                    <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1.5 leading-none">Department <span className="text-red-500">* Required</span></label>
                                                     <input
                                                         type="text"
                                                         className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-[#FDF22F]/20 focus:border-[#FDF22F] transition-all text-sm font-bold text-[#000000]"
@@ -453,7 +509,7 @@ export default function DeptManagerDashboard({ user, activeTab: initialTab, onLo
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1.5 leading-none">Location / Branch</label>
+                                                    <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1.5 leading-none">Location / Branch <span className="text-red-500">* Required</span></label>
                                                     <input
                                                         type="text"
                                                         className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-[#FDF22F]/20 focus:border-[#FDF22F] transition-all text-sm font-bold text-[#000000]"
@@ -535,34 +591,49 @@ export default function DeptManagerDashboard({ user, activeTab: initialTab, onLo
                                                     />
                                                 </div>
                                                 <div className="pt-4 border-t border-gray-100 border-dashed">
-                                                    <label className="block text-[11px] font-black text-[#000000] uppercase tracking-widest mb-3">Job Description (JD) File</label>
-                                                    <div className={`relative border-2 border-dashed rounded-[20px] p-8 transition-all flex flex-col items-center justify-center text-center ${jdFile ? 'border-[#FDF22F] bg-[#FDF22F]/5' : 'border-gray-200 hover:border-black bg-gray-50/50'}`}>
-                                                        <input
-                                                            type="file"
-                                                            onChange={(e) => setJdFile(e.target.files ? e.target.files[0] : null)}
-                                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                                                            accept=".pdf,.doc,.docx"
-                                                        />
-                                                        <div className="space-y-2">
-                                                            {jdFile ? (
-                                                                <>
-                                                                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-black mb-2 mx-auto">
-                                                                        <svg className="w-6 h-6 text-[#FDF22F]" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" /></svg>
-                                                                    </div>
-                                                                    <p className="text-sm font-black text-[#000000] truncate max-w-[200px]">{jdFile.name}</p>
-                                                                    <p className="text-[10px] font-bold text-gray-400 uppercase">Click to replace file</p>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-gray-300 mb-2 mx-auto">
-                                                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                                                                    </div>
-                                                                    <p className="text-sm font-black text-[#000000]">Upload JD Document</p>
-                                                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">PDF or Word (Max 5MB)</p>
-                                                                </>
-                                                            )}
+                                                    <label className="block text-[11px] font-black text-[#000000] uppercase tracking-widest mb-3 flex justify-between items-center">
+                                                        <span>Job Description (JD) Content</span>
+                                                        <span className="text-[9px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full animate-pulse">Rich Layout Active</span>
+                                                    </label>
+                                                    <div className="relative group/jd bg-white rounded-[32px] border border-gray-200 shadow-xl overflow-hidden min-h-[500px] flex flex-col">
+                                                        {/* Toolbar Decoration */}
+                                                        <div className="px-6 py-3 border-b border-gray-50 bg-[#F9FAFB] flex gap-4 items-center">
+                                                            <div className="flex gap-1.5">
+                                                                <div className="w-2.5 h-2.5 rounded-full bg-red-200" />
+                                                                <div className="w-2.5 h-2.5 rounded-full bg-amber-200" />
+                                                                <div className="w-2.5 h-2.5 rounded-full bg-emerald-200" />
+                                                            </div>
+                                                            <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-2">Document View</span>
                                                         </div>
+
+                                                        <div
+                                                            ref={jdContentRef}
+                                                            contentEditable
+                                                            suppressContentEditableWarning
+                                                            onInput={(e) => {
+                                                                const html = e.currentTarget.innerHTML;
+                                                                setFormData(prev => ({ ...prev, jd_content: html }));
+                                                            }}
+                                                            onBlur={(e) => {
+                                                                const html = e.currentTarget.innerHTML;
+                                                                setFormData(prev => ({ ...prev, jd_content: html }));
+                                                            }}
+                                                            className="flex-1 px-10 py-10 outline-none text-sm font-medium leading-relaxed text-black overflow-y-auto max-h-[600px] prose prose-sm max-w-none"
+                                                            dangerouslySetInnerHTML={{ __html: formData.jd_content }}
+                                                        />
+
+                                                        {!formData.jd_content && (
+                                                            <div className="absolute inset-x-0 top-24 pointer-events-none flex flex-col items-center justify-center text-center px-10">
+                                                                <svg className="w-12 h-12 text-gray-100 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                                <p className="text-gray-300 text-sm font-medium">Paste your professional Job Description content here</p>
+                                                                <p className="text-gray-200 text-[10px] uppercase font-bold tracking-[0.2em] mt-2">Rich formatting & layout will be preserved</p>
+                                                            </div>
+                                                        )}
                                                     </div>
+                                                    <p className="text-[10px] text-gray-400 mt-4 italic font-medium flex items-center gap-2">
+                                                        <span className="text-[#FDF22F]">✨</span>
+                                                        Pro Tip: Copy EVERYTHING (Headers, Lists, Tables) from your local file and paste it directly. The system catch the exact layout.
+                                                    </p>
                                                 </div>
                                             </div>
                                         </section>
@@ -581,7 +652,7 @@ export default function DeptManagerDashboard({ user, activeTab: initialTab, onLo
                                 )}
                                 <button
                                     onClick={() => wizardStep === 1 ? setWizardStep(2) : handleSubmit()}
-                                    disabled={submitting || (wizardStep === 1 && (!formData.title || !formData.department))}
+                                    disabled={submitting || !formData.title || !formData.department || !formData.location}
                                     className="flex-[2] py-4 bg-[#FDF22F] hover:bg-black text-[#000000] hover:text-white rounded-xl text-[11px] font-black tracking-widest uppercase shadow-xl shadow-[#FDF22F]/10 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                                 >
                                     {submitting ? (

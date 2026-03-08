@@ -131,11 +131,10 @@ export default function JobBoard({
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
-                className={`px-4 md:px-5 py-2 md:py-2.5 rounded-full text-xs md:text-sm font-bold transition-all ${
-                  activeCategory === cat
-                    ? "bg-[#000000] text-white shadow-xl shadow-[#000000]/20"
-                    : "bg-[#FDF22F] text-[#000000] hover:bg-[#000000]/5"
-                }`}
+                className={`px-4 md:px-5 py-2 md:py-2.5 rounded-full text-xs md:text-sm font-bold transition-all ${activeCategory === cat
+                  ? "bg-[#000000] text-white shadow-xl shadow-[#000000]/20"
+                  : "bg-[#FDF22F] text-[#000000] hover:bg-[#000000]/5"
+                  }`}
               >
                 {cat}
               </button>
@@ -229,19 +228,22 @@ export default function JobBoard({
                         </svg>
                         <span className="text-[9px] font-bold text-[#000000]/60 whitespace-nowrap">
                           {(() => {
-                            const d = new Date(
-                              job.published_at || job.created_at,
-                            );
+                            const published = job.published_at || job.created_at;
+                            if (!published) return 'Posted Recently';
+
+                            const pDate = new Date(published);
                             const now = new Date();
-                            const diffDays = Math.floor(
-                              (now.getTime() - d.getTime()) /
-                                (1000 * 60 * 60 * 24),
-                            );
-                            return diffDays === 0
-                              ? "Posted Today"
-                              : diffDays === 1
-                                ? "Posted 1 day ago"
-                                : `Posted ${diffDays} days ago`;
+
+                            // Normalize to start of day for accurate day counting
+                            const d1 = new Date(pDate.getFullYear(), pDate.getMonth(), pDate.getDate());
+                            const d2 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+                            const diffTime = d2.getTime() - d1.getTime();
+                            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+                            if (diffDays <= 0) return 'Posted Today';
+                            if (diffDays === 1) return 'Posted Yesterday';
+                            return `Posted ${diffDays} days ago`;
                           })()}
                         </span>
                       </div>
@@ -262,22 +264,32 @@ export default function JobBoard({
                       </svg>
                       <span className="text-[9px] font-bold text-[#000000]/60 whitespace-nowrap">
                         {(() => {
-                          const d = job.deadline
-                            ? new Date(job.deadline)
-                            : new Date(
-                                new Date(
-                                  job.published_at || job.created_at,
-                                ).getTime() +
-                                  30 * 24 * 60 * 60 * 1000,
-                              );
+                          if (!job.deadline) return 'No Deadline Set';
+
+                          const dDate = new Date(job.deadline);
                           const now = new Date();
-                          const diffTime = d.getTime() - now.getTime();
-                          const diffDays = Math.ceil(
-                            diffTime / (1000 * 60 * 60 * 24),
-                          );
-                          return diffDays <= 0
-                            ? "Closes Today"
-                            : `Closes in ${diffDays} days`;
+
+                          // Format the exact date
+                          const exactDate = dDate.toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          });
+
+                          // Normalize to start of day for countdown
+                          const d1 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                          const d2 = new Date(dDate.getFullYear(), dDate.getMonth(), dDate.getDate());
+
+                          const diffTime = d2.getTime() - d1.getTime();
+                          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                          let countdown = '';
+                          if (diffDays < 0) countdown = '(Closed)';
+                          else if (diffDays === 0) countdown = '(Today)';
+                          else if (diffDays === 1) countdown = '(Tomorrow)';
+                          else countdown = `(${diffDays} days left)`;
+
+                          return `${exactDate} ${countdown}`;
                         })()}
                       </span>
                     </div>
@@ -325,11 +337,10 @@ export default function JobBoard({
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                      currentPage === pageNum
-                        ? "bg-[#000000] text-white shadow-lg shadow-[#000000]/20"
-                        : "bg-[#FDF22F] text-[#000000] hover:bg-[#000000]/10"
-                    }`}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${currentPage === pageNum
+                      ? "bg-[#000000] text-white shadow-lg shadow-[#000000]/20"
+                      : "bg-[#FDF22F] text-[#000000] hover:bg-[#000000]/10"
+                      }`}
                   >
                     {pageNum}
                   </button>

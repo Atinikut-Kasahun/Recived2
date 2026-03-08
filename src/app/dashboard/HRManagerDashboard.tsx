@@ -3,7 +3,22 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiFetch, API_URL } from '@/lib/api';
-import { Check, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, FileText, CheckCircle2 } from 'lucide-react';
+
+/* ─── Toast ─────────────────────────────────────────────── */
+function Toast({ msg, type }: { msg: string; type: 'success' | 'error' }) {
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className={`fixed bottom-8 right-8 z-[200] px-6 py-4 rounded-2xl shadow-2xl text-[13px] font-black uppercase tracking-widest text-[#FDF22F] flex items-center gap-3 border border-[#FDF22F]/20 bg-black animate-in slide-in-from-bottom-5 duration-300`}
+        >
+            <CheckCircle2 size={18} className="text-[#FDF22F]" />
+            <span>{msg}</span>
+        </motion.div>
+    );
+}
 
 interface Requisition {
     id: number;
@@ -16,7 +31,8 @@ interface Requisition {
     location: string;
     status: string;
     description: string | null;
-    jd_path: string | null; // Added field
+    jd_path: string | null;
+    jd_content?: string;
     created_at: string;
     requester?: { id: number; name: string; email: string };
     tenant?: { name: string };
@@ -33,12 +49,19 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
     const [loading, setLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [drawerReq, setDrawerReq] = useState<Requisition | null>(null);
-    const [rejectTarget, setRejectTarget] = useState<number | null>(null);
-    const [rejectReason, setRejectReason] = useState('');
+    const [feedbackTarget, setFeedbackTarget] = useState<number | null>(null);
+    const [actionType, setActionType] = useState<'reject' | 'amend' | null>(null);
+    const [feedbackReason, setFeedbackReason] = useState('');
     const [actionLoading, setActionLoading] = useState(false);
     const [localTab, setLocalTab] = useState(initialTab === 'HiringPlan' ? 'HIRING PLAN' : 'JOBS');
     const [stats, setStats] = useState<any>(null);
     const [reportFilters, setReportFilters] = useState({ dateRange: '30', department: 'All', jobId: 'All' });
+    const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+    const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+        setToast({ msg, type });
+        setTimeout(() => setToast(null), 4000);
+    };
 
     const fetchData = async () => {
         try {
@@ -71,6 +94,15 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
         fetchData();
     }, [localTab, reportFilters, reqsPage, jobsPage]);
 
+    const isMD = user?.roles?.some((r: any) => r.slug === 'managing_director');
+    const isHR = user?.roles?.some((r: any) => r.slug === 'hr_manager');
+
+    const canApprove = (req: Requisition) => {
+        if (isMD && req.status === 'pending_md') return true;
+        if (isHR && req.status === 'pending_hr') return true;
+        return false;
+    };
+
     const handleApprove = async (id: number) => {
         setActionLoading(true);
         try {
@@ -80,6 +112,7 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
                 body: JSON.stringify({ status: 'approved' }),
             });
             setDrawerReq(null);
+            showToast('Requisition Approved Successfully');
             fetchData();
         } catch (e) {
             console.error(e);
@@ -88,17 +121,28 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
         }
     };
 
-    const handleReject = async () => {
-        if (!rejectTarget || !rejectReason.trim()) return;
+    const handleAction = async () => {
+        if (!feedbackTarget || !feedbackReason.trim() || !actionType) return;
         setActionLoading(true);
         try {
-            await apiFetch(`/v1/requisitions/${rejectTarget}/status`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'rejected', rejection_reason: rejectReason }),
-            });
-            setRejectTarget(null);
-            setRejectReason('');
+            if (actionType === 'amend') {
+                await apiFetch(`/v1/requisitions/${feedbackTarget}/amend`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ comment: feedbackReason }),
+                });
+                showToast('Sent back for amendment');
+            } else {
+                await apiFetch(`/v1/requisitions/${feedbackTarget}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'rejected', rejection_reason: feedbackReason }),
+                });
+                showToast('Requisition Rejected');
+            }
+            setFeedbackTarget(null);
+            setFeedbackReason('');
+            setActionType(null);
             setDrawerReq(null);
             fetchData();
         } catch (e) {
@@ -107,6 +151,8 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
             setActionLoading(false);
         }
     };
+
+
 
     const handleBulkApprove = async () => {
         if (selectedIds.length === 0) return;
@@ -118,6 +164,7 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
                 body: JSON.stringify({ ids: selectedIds }),
             });
             setSelectedIds([]);
+            showToast(`${selectedIds.length} Requisitions Approved`);
             fetchData();
         } catch (e) {
             console.error(e);
@@ -126,7 +173,7 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
         }
     };
 
-    const pendingReqs = requisitions.filter(r => r.status === 'pending');
+    const pendingReqs = requisitions.filter(r => r.status === 'pending_md' || r.status === 'pending_hr');
 
     return (
         <div className="space-y-6 pb-20">
@@ -252,7 +299,7 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
                                             className="accent-[#FDF22F] rounded-lg w-4 h-4 cursor-pointer"
                                         />
                                     </th>
-                                    {['REQUISITION', 'COMPANY', 'HIRING MANAGER', 'LOCATION', 'SALARY', 'SUBMITTED ON', 'POSTED TO PORTAL', 'STATUS'].map(h => (
+                                    {['REQUISITION', 'COMPANY', 'GENERAL MANAGER (GM)', 'LOCATION', 'SALARY', 'SUBMITTED ON', 'POSTED TO PORTAL', 'STATUS'].map(h => (
                                         <th key={h} className="px-6 py-4 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
                                     ))}
                                 </tr>
@@ -263,7 +310,7 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
                                 ) : requisitions.map((req) => (
                                     <tr key={req.id} className="hover:bg-gray-50 transition-colors group cursor-pointer">
                                         <td className="pl-6 py-6" onClick={(e) => e.stopPropagation()}>
-                                            {req.status === 'pending' && (
+                                            {(req.status === 'pending_md' || req.status === 'pending_hr') && (
                                                 <input
                                                     type="checkbox"
                                                     checked={selectedIds.includes(req.id)}
@@ -286,7 +333,7 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
                                             </span>
                                         </td>
                                         <td className="px-6 py-6 text-[13px] text-gray-600">
-                                            {req.requester?.name || 'Hiring Manager'}
+                                            {req.requester?.name || 'General Manager'}
                                         </td>
                                         <td className="px-6 py-6 text-[13px] text-gray-600">
                                             {req.location || '—'}
@@ -340,7 +387,7 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
                                             )}
                                         </td>
                                         <td className="px-6 py-6">
-                                            {req.status === 'pending' ? (
+                                            {canApprove(req) ? (
                                                 <div className="flex gap-2">
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleApprove(req.id); }}
@@ -348,17 +395,28 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
                                                     >
                                                         Approve
                                                     </button>
+                                                    {isMD && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setFeedbackTarget(req.id); setActionType('amend'); setFeedbackReason(''); setDrawerReq(req); }}
+                                                            className="text-[10px] font-black text-amber-600 bg-amber-50 px-4 py-2 rounded-xl hover:bg-amber-100 transition-all border border-amber-100 uppercase tracking-widest"
+                                                        >
+                                                            Amend
+                                                        </button>
+                                                    )}
                                                     <button
-                                                        onClick={(e) => { e.stopPropagation(); setRejectTarget(req.id); setRejectReason(''); setDrawerReq(req); }}
+                                                        onClick={(e) => { e.stopPropagation(); setFeedbackTarget(req.id); setActionType('reject'); setFeedbackReason(''); setDrawerReq(req); }}
                                                         className="text-[10px] font-black text-gray-400 bg-white px-4 py-2 rounded-xl hover:bg-black hover:text-[#FDF22F] transition-all border border-gray-100 uppercase tracking-widest"
                                                     >
                                                         Reject
                                                     </button>
                                                 </div>
                                             ) : (
-                                                <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${req.status === 'approved' ? 'bg-[#FDF22F]/10 text-black border border-[#FDF22F]/20' : 'bg-black text-[#FDF22F]'
+                                                <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${req.status === 'approved' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                                    req.status === 'rejected' ? 'bg-red-50 text-red-600 border border-red-100' :
+                                                        req.status === 'amendment_required' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                                                            'bg-gray-100 text-gray-500 border border-gray-200'
                                                     }`}>
-                                                    {req.status}
+                                                    {req.status.replace('_', ' ')}
                                                 </span>
                                             )}
                                         </td>
@@ -472,7 +530,7 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
                     <>
                         <motion.div
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            onClick={() => { setDrawerReq(null); setRejectTarget(null); }}
+                            onClick={() => { setDrawerReq(null); setFeedbackTarget(null); setActionType(null); }}
                             className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[110]"
                         />
                         <motion.div
@@ -486,7 +544,7 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
                                     <h2 className="text-2xl font-black text-[#000000]">{drawerReq.title}</h2>
                                     <p className="text-gray-400 text-sm mt-1">{drawerReq.department} · {drawerReq.tenant?.name || user.tenant?.name || 'Droga Pharma'}</p>
                                 </div>
-                                <button onClick={() => { setDrawerReq(null); setRejectTarget(null); }} className="text-gray-300 hover:text-gray-500 transition-colors">
+                                <button onClick={() => { setDrawerReq(null); setFeedbackTarget(null); setActionType(null); }} className="text-gray-300 hover:text-gray-500 transition-colors">
                                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                                 </button>
                             </div>
@@ -505,8 +563,8 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
 
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center">
-                                        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Justification / Description</h3>
-                                        {drawerReq.jd_path && (
+                                        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Job Description (JD) Content</h3>
+                                        {drawerReq.jd_path && !drawerReq.jd_content && (
                                             <a
                                                 href={`${API_URL}/v1/requisitions/${drawerReq.id}/jd?token=${typeof window !== 'undefined' ? localStorage.getItem('auth_token') : ''}`}
                                                 target="_blank"
@@ -514,33 +572,52 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
                                                 className="flex items-center gap-2 text-[10px] font-black text-[#000000] hover:underline uppercase tracking-widest bg-emerald-50 px-3 py-1.5 rounded-lg transition-all"
                                             >
                                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                                View JD Document
+                                                View Legacy JD Doc
                                             </a>
                                         )}
                                     </div>
-                                    <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-4 rounded border border-gray-100 border-dashed">
-                                        {drawerReq.description || 'No detailed description provided for this requisition.'}
-                                    </p>
+                                    <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100 border-dashed max-h-[300px] overflow-y-auto">
+                                        {drawerReq.jd_content ? (
+                                            <div
+                                                className="text-sm text-gray-700 leading-relaxed prose prose-sm max-w-none"
+                                                dangerouslySetInnerHTML={{ __html: drawerReq.jd_content }}
+                                            />
+                                        ) : (
+                                            <p className="text-sm text-gray-400 italic">No text-based JD content provided.</p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2 pt-4">
+                                        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Justification / Description</h3>
+                                        <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-4 rounded border border-gray-100 italic">
+                                            {drawerReq.description || 'No detailed description provided.'}
+                                        </p>
+                                    </div>
                                 </div>
 
-                                {drawerReq.status === 'pending' && (
+                                {canApprove(drawerReq) && (
                                     <div className="pt-8 space-y-4 border-t border-gray-100">
-                                        {rejectTarget === drawerReq.id ? (
+                                        {feedbackTarget === drawerReq.id ? (
                                             <div className="space-y-4">
+                                                <p className="text-[11px] font-black uppercase text-gray-500 tracking-widest">
+                                                    {actionType === 'amend' ? 'Mandatory Amendment Feedback for GM' : 'Rejection Reason'}
+                                                </p>
                                                 <textarea
-                                                    value={rejectReason}
-                                                    onChange={(e) => setRejectReason(e.target.value)}
-                                                    placeholder="Provide professional feedback for the manager..."
-                                                    className="w-full px-5 py-4 bg-gray-50 border border-red-100 rounded-2xl focus:ring-4 focus:ring-red-100 focus:border-red-500 outline-none text-sm h-32 font-medium transition-all"
+                                                    value={feedbackReason}
+                                                    onChange={(e) => setFeedbackReason(e.target.value)}
+                                                    placeholder={actionType === 'amend' ? "e.g. 'The salary range is too high for this quarter' - this will unlock the req for the General Manager to edit." : "Provide professional feedback for the manager..."}
+                                                    className={`w-full px-5 py-4 bg-gray-50 border rounded-2xl outline-none text-sm h-32 font-medium transition-all ${actionType === 'amend' ? 'border-amber-100 focus:ring-4 focus:ring-amber-50 focus:border-amber-500' : 'border-red-100 focus:ring-4 focus:ring-red-50 focus:border-red-500'
+                                                        }`}
                                                 />
                                                 <div className="flex gap-3">
-                                                    <button onClick={() => setRejectTarget(null)} className="flex-1 px-6 py-4 bg-gray-100 text-gray-500 rounded-2xl text-[11px] font-black tracking-widest uppercase hover:bg-gray-200 transition-all">Cancel</button>
+                                                    <button onClick={() => { setFeedbackTarget(null); setActionType(null); }} className="flex-1 px-6 py-4 bg-gray-100 text-gray-500 rounded-2xl text-[11px] font-black tracking-widest uppercase hover:bg-gray-200 transition-all">Cancel</button>
                                                     <button
-                                                        onClick={handleReject}
-                                                        disabled={!rejectReason.trim() || actionLoading}
-                                                        className="flex-[2] px-6 py-4 bg-black text-white rounded-2xl text-[11px] font-black tracking-widest uppercase hover:bg-red-600 transition-all disabled:opacity-50"
+                                                        onClick={handleAction}
+                                                        disabled={!feedbackReason.trim() || actionLoading}
+                                                        className={`flex-[2] px-6 py-4 text-white rounded-2xl text-[11px] font-black tracking-widest uppercase transition-all disabled:opacity-50 ${actionType === 'amend' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-black hover:bg-red-600'
+                                                            }`}
                                                     >
-                                                        Confirm & Notify
+                                                        Confirm & Notify GM
                                                     </button>
                                                 </div>
                                             </div>
@@ -554,8 +631,16 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
                                                     Approve Requisition
                                                     <ChevronRight size={18} className="translate-x-0 group-hover:translate-x-1 transition-transform" />
                                                 </button>
+                                                {isMD && (
+                                                    <button
+                                                        onClick={() => { setFeedbackTarget(drawerReq.id); setActionType('amend'); }}
+                                                        className="flex-1 px-6 py-5 bg-amber-50 text-amber-600 rounded-[20px] text-[12px] font-black tracking-widest uppercase border border-amber-100 hover:border-amber-500 transition-all"
+                                                    >
+                                                        Amend
+                                                    </button>
+                                                )}
                                                 <button
-                                                    onClick={() => setRejectTarget(drawerReq.id)}
+                                                    onClick={() => { setFeedbackTarget(drawerReq.id); setActionType('reject'); }}
                                                     className="flex-1 px-6 py-5 bg-white text-gray-400 rounded-[20px] text-[12px] font-black tracking-widest uppercase border border-gray-100 hover:border-red-500 hover:text-red-500 transition-all"
                                                 >
                                                     Reject
@@ -568,6 +653,9 @@ export default function HRManagerDashboard({ user, activeTab: initialTab, onLogo
                         </motion.div>
                     </>
                 )}
+            </AnimatePresence>
+            <AnimatePresence>
+                {toast && <Toast msg={toast.msg} type={toast.type} />}
             </AnimatePresence>
         </div>
     );

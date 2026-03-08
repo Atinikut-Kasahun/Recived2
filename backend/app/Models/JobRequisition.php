@@ -24,12 +24,28 @@ class JobRequisition extends Model
         'budget',
         'position_type',
         'priority',
-        'status', // pending, approved, rejected
+        'status', // pending_md, amendment_required, pending_hr, approved, rejected
         'rejection_reason',
+        'amendment_comment',
+        'md_approved_by',
+        'md_approved_at',
+        'hr_approved_by',
+        'hr_approved_at',
         'approved_at',
         'approved_by',
         'jd_path',
+        'jd_content',
     ];
+
+    public function mdApprover(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'md_approved_by');
+    }
+
+    public function hrApprover(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'hr_approved_by');
+    }
 
     public function tenant(): BelongsTo
     {

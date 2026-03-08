@@ -45,7 +45,7 @@ function ConfirmDialog({
     title, detail, warning, onConfirm, onCancel, loading, error,
     confirmLabel = 'Delete',
     confirmLoadingLabel = 'Deleting…',
-    confirmColorClass = 'bg-red-500 hover:bg-red-600',
+    confirmColorClass = 'bg-red-500 hover:bg-red-600 text-white',
     icon = <AlertTriangle size={28} className="text-red-500" />
 }: {
     title: string; detail: string; warning?: string;
@@ -79,10 +79,10 @@ function ConfirmDialog({
                         </div>
                     )}
                     <div className="flex gap-3 mt-2">
-                        <button onClick={onCancel} className="flex-1 py-4 bg-gray-100 text-gray-500 font-black uppercase tracking-widest rounded-2xl hover:bg-gray-200 transition-all text-[11px]">
+                        <button onClick={onCancel} className="flex-1 py-4 bg-gray-100 text-gray-500 font-black uppercase tracking-widest rounded-2xl hover:bg-gray-200 transition-all text-[13px]">
                             Cancel
                         </button>
-                        <button onClick={onConfirm} disabled={loading} className={`flex-1 py-4 text-white font-black uppercase tracking-widest rounded-2xl transition-all text-[11px] disabled:opacity-50 shadow-xl ${confirmColorClass}`}>
+                        <button onClick={onConfirm} disabled={loading} className={`flex-1 py-4 font-black uppercase tracking-widest rounded-2xl transition-all text-[13px] disabled:opacity-50 shadow-xl ${confirmColorClass}`}>
                             {loading ? confirmLoadingLabel : confirmLabel}
                         </button>
                     </div>
@@ -132,7 +132,14 @@ function CredentialCard({
 
                     <div>
                         <p className="text-[10px] font-black text-brandYellow/50 uppercase tracking-[0.2em] mb-1.5">Email Access</p>
-                        <p className="font-bold text-white text-sm font-mono break-all">{credentials.email}</p>
+                        <p className="font-bold text-white text-sm font-mono break-all">
+                            {(credentials.email || '').split('@').map((part, i, arr) => (
+                                <React.Fragment key={i}>
+                                    {part}
+                                    {i < arr.length - 1 && <span className="text-brandYellow font-black px-0.5">@</span>}
+                                </React.Fragment>
+                            ))}
+                        </p>
                     </div>
                     <div>
                         <p className="text-[10px] font-black text-brandYellow/50 uppercase tracking-[0.2em] mb-1.5">Temporary Password</p>
@@ -209,7 +216,8 @@ function AddUserModal({ tenant, tenants, onClose, onAdded }: {
                             value={form.role_slug} onChange={e => setForm({ ...form, role_slug: e.target.value })}>
                             <option value="admin">Global Admin</option>
                             <option value="hr_manager">HR Manager</option>
-                            <option value="hiring_manager">Department Manager</option>
+                            <option value="hiring_manager">General Manager (GM)</option>
+                            <option value="managing_director">Managing Director (MD)</option>
                             <option value="ta_manager">Talent Acquisition</option>
                         </select>
                     </div>
@@ -365,8 +373,8 @@ function CompanyPanel({
                     error={resetError}
                     confirmLabel="Reset Access"
                     confirmLoadingLabel="Resetting..."
-                    confirmColorClass="bg-[#FDF22F] text-[#000000] hover:bg-black hover:text-white shadow-[#FDF22F]/20"
-                    icon={<Key size={28} className="text-[#FDF22F]" />}
+                    confirmColorClass="bg-[#FDF22F] text-[#000000] border-2 border-[#000000] hover:bg-black hover:text-[#FDF22F] hover:border-black transition-all shadow-xl shadow-brandYellow/20"
+                    icon={<Key size={32} className="text-[#000000]" />}
                 />
             )}
 
@@ -463,13 +471,14 @@ function CompanyPanel({
                                     >
                                         <option value="admin">Global Admin</option>
                                         <option value="hr_manager">HR Manager</option>
-                                        <option value="hiring_manager">Department Manager</option>
+                                        <option value="hiring_manager">General Manager (GM)</option>
+                                        <option value="managing_director">Managing Director (MD)</option>
                                         <option value="ta_manager">Talent Acq.</option>
                                     </select>
-                                    <div className="opacity-0 group-hover:opacity-100 flex items-center transition-opacity border-l border-gray-200 pl-1 ml-1">
+                                    <div className="opacity-40 group-hover:opacity-100 flex items-center transition-opacity border-l border-gray-200 pl-1 ml-1">
                                         <button
                                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setResetTarget(u); }}
-                                            className="p-1.5 text-gray-400 hover:text-brandYellow hover:bg-black rounded-lg transition-all"
+                                            className="p-1.5 text-gray-500 hover:text-black hover:bg-brandYellow rounded-lg transition-all"
                                             title="Reset Password"
                                         >
                                             <Key size={15} />
@@ -1023,9 +1032,9 @@ function GlobalDashboard({ user }: { user: any }) {
 
     return (
         <div className="min-h-screen bg-[#F5F6FA] flex">
-            <AdminSidebar 
-                user={user} 
-                tenants={tenants} 
+            <AdminSidebar
+                user={user}
+                tenants={tenants}
                 isOpen={isSidebarOpen}
                 onClose={() => setIsSidebarOpen(false)}
             />
@@ -1034,7 +1043,7 @@ function GlobalDashboard({ user }: { user: any }) {
                 {/* Top Bar */}
                 <header className="bg-white border-b border-gray-100 h-16 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-40 shadow-sm">
                     <div className="flex items-center gap-4">
-                        <button 
+                        <button
                             onClick={() => setIsSidebarOpen(true)}
                             className="lg:hidden p-2 -ml-2 text-gray-400 hover:text-[#000000] transition-colors"
                         >
@@ -1158,7 +1167,7 @@ function GlobalDashboard({ user }: { user: any }) {
                         if (tab === 'Users') return <GlobalUsersView />;
                         if (tab === 'Jobs') return <GlobalJobsView tenants={tenants} />;
                         if (tab === 'Candidates') return <GlobalApplicantsView tenants={tenants} />;
-                        if (tab === 'HiringPlan') return <GlobalRequisitionsView tenants={tenants} />;
+                        if (tab === 'HiringPlan') return <GlobalRequisitionsView tenants={tenants} user={user} />;
                         if (tab === 'Calendar') return <GlobalInterviewsView tenants={tenants} />;
                         if (tab === 'Events') return <GlobalEventsView tenants={tenants} />;
                         if (tab === 'Reports') return <GlobalReportsView />;
@@ -1394,6 +1403,7 @@ function GlobalDashboard({ user }: { user: any }) {
 
 /* ─── Company Admin Dashboard ────────────────────────────── */
 function CompanyDashboard({ user }: { user: any }) {
+    const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const [stats, setStats] = useState<any>(null);
@@ -1426,9 +1436,9 @@ function CompanyDashboard({ user }: { user: any }) {
 
     return (
         <div className="min-h-screen bg-[#F5F6FA] flex">
-            <AdminSidebar 
-                user={user} 
-                tenants={[]} 
+            <AdminSidebar
+                user={user}
+                tenants={[]}
                 isOpen={isSidebarOpen}
                 onClose={() => setIsSidebarOpen(false)}
             />
@@ -1437,7 +1447,7 @@ function CompanyDashboard({ user }: { user: any }) {
                 {/* Brand Header */}
                 <header className="bg-[#0A0A0A] border-b border-white/5 h-20 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-40 shadow-2xl">
                     <div className="flex items-center gap-6">
-                        <button 
+                        <button
                             onClick={() => setIsSidebarOpen(true)}
                             className="lg:hidden p-2 -ml-2 text-gray-400 hover:text-brandYellow transition-colors"
                         >
@@ -1447,16 +1457,16 @@ function CompanyDashboard({ user }: { user: any }) {
                                 <line x1="3" y1="18" x2="21" y2="18"></line>
                             </svg>
                         </button>
-                        
+
                         {/* Company Branding */}
                         <div className="flex items-center gap-3 border-r border-white/10 pr-6 mr-2">
-                           <div className="w-10 h-10 rounded-xl bg-brandYellow flex items-center justify-center text-[#000000] font-black text-xl shadow-lg shadow-brandYellow/20">
-                               D
-                           </div>
-                           <div className="hidden md:block">
-                               <h1 className="text-white font-black text-lg tracking-tight leading-none uppercase">Droga Pharma</h1>
-                               <p className="text-brandYellow text-[10px] font-black uppercase tracking-[0.2em] mt-1.5">TA Teams Dashboard</p>
-                           </div>
+                            <div className="w-10 h-10 rounded-xl bg-brandYellow flex items-center justify-center text-[#000000] font-black text-xl shadow-lg shadow-brandYellow/20">
+                                D
+                            </div>
+                            <div className="hidden md:block">
+                                <h1 className="text-white font-black text-lg tracking-tight leading-none uppercase">Droga Pharma</h1>
+                                <p className="text-brandYellow text-[10px] font-black uppercase tracking-[0.2em] mt-1.5">TA Teams Dashboard</p>
+                            </div>
                         </div>
 
                         {/* Horizontal Nav */}
@@ -1473,11 +1483,10 @@ function CompanyDashboard({ user }: { user: any }) {
                                     <button
                                         key={item.label}
                                         onClick={() => router.push(`/admin/dashboard?tab=${item.tab}`)}
-                                        className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
-                                            active 
-                                            ? 'bg-brandYellow text-[#000000] shadow-lg shadow-brandYellow/10' 
+                                        className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${active
+                                            ? 'bg-brandYellow text-[#000000] shadow-lg shadow-brandYellow/10'
                                             : 'text-gray-400 hover:text-white hover:bg-white/5'
-                                        }`}
+                                            }`}
                                     >
                                         {item.label}
                                     </button>
@@ -1489,13 +1498,13 @@ function CompanyDashboard({ user }: { user: any }) {
                     <div className="flex items-center gap-4">
                         <div className="hidden lg:flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-gray-500 text-sm focus-within:border-brandYellow/50 transition-all w-64">
                             <Search size={14} className="text-brandYellow" />
-                            <input 
-                                type="text" 
-                                placeholder="Search everything..." 
+                            <input
+                                type="text"
+                                placeholder="Search everything..."
                                 className="bg-transparent border-none outline-none text-xs text-white placeholder:text-gray-600 w-full font-medium"
                             />
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
                             <button className="p-2.5 rounded-xl bg-white/5 text-gray-400 hover:text-brandYellow hover:bg-brandYellow/10 transition-all relative border border-white/5">
                                 <Mail size={18} />
@@ -1512,7 +1521,7 @@ function CompanyDashboard({ user }: { user: any }) {
                                 {user.name.charAt(0).toUpperCase()}
                             </div>
                             <button onClick={onLogout} className="hidden sm:flex items-center gap-1.5 text-[10px] font-black text-gray-500 hover:text-red-500 uppercase tracking-widest transition-colors">
-                                <LogOut size={14} /> 
+                                <LogOut size={14} />
                             </button>
                         </div>
                     </div>
@@ -1524,7 +1533,7 @@ function CompanyDashboard({ user }: { user: any }) {
                         if (tab === 'Users') return <CompanyUsersView />;
                         if (tab === 'Jobs') return <CompanyJobsView user={user} />;
                         if (tab === 'Candidates') return <CompanyApplicantsView user={user} />;
-                        if (tab === 'HiringPlan') return <GlobalRequisitionsView tenants={[]} />;
+                        if (tab === 'HiringPlan') return <GlobalRequisitionsView tenants={[]} user={user} />;
                         if (tab === 'Reports') return <GlobalReportsView />;
 
                         return (
@@ -2117,12 +2126,14 @@ function GlobalJobsView({ tenants }: { tenants: any[] }) {
 }
 
 /* ─── Global Requisitions View ────────────────────────────── */
-function GlobalRequisitionsView({ tenants }: { tenants: any[] }) {
+function GlobalRequisitionsView({ tenants, user }: { tenants: any[]; user?: any }) {
     const [reqs, setReqs] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterTenant, setFilterTenant] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
     const [actionLoading, setActionLoading] = useState<number | false>(false);
+    const [showAmendModal, setShowAmendModal] = useState<any>(null);
+    const [amendmentComment, setAmendmentComment] = useState('');
 
     const fetchReqs = useCallback(async () => {
         setLoading(true);
@@ -2151,16 +2162,40 @@ function GlobalRequisitionsView({ tenants }: { tenants: any[] }) {
                 body: JSON.stringify({ status: 'approved' }),
             });
             fetchReqs();
-        } catch (e) {
-            console.error(e);
+        } catch (e: any) {
+            alert(e.message || "Failed to approve requisition");
         } finally {
             setActionLoading(false);
         }
     };
 
+    const handleAmend = async () => {
+        if (!showAmendModal || !amendmentComment.trim()) return;
+        setActionLoading(showAmendModal.id);
+        try {
+            await apiFetch(`/v1/requisitions/${showAmendModal.id}/amend`, {
+                method: 'POST',
+                body: JSON.stringify({ comment: amendmentComment }),
+            });
+            setShowAmendModal(null);
+            setAmendmentComment('');
+            fetchReqs();
+        } catch (e: any) {
+            alert(e.message || "Failed to send for amendment");
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const isMD = user?.roles?.some((r: any) => r.slug === 'managing_director');
+    const isHR = user?.roles?.some((r: any) => r.slug === 'hr_manager');
+    const isAdmin = user?.roles?.some((r: any) => r.slug === 'admin');
+
     const statusColor: Record<string, string> = {
         approved: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-        pending: 'bg-amber-50 text-amber-600 border-amber-100',
+        pending_md: 'bg-amber-50 text-amber-600 border-amber-100',
+        pending_hr: 'bg-blue-50 text-blue-600 border-blue-100',
+        amendment_required: 'bg-purple-50 text-purple-600 border-purple-100',
         rejected: 'bg-red-50 text-red-500 border-red-100',
     };
 
@@ -2176,13 +2211,15 @@ function GlobalRequisitionsView({ tenants }: { tenants: any[] }) {
                 )}
                 <select className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brandYellow/50 font-bold text-gray-700 bg-white shadow-sm" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
                     <option value="">All Statuses</option>
-                    <option value="pending">Pending Approval</option>
+                    <option value="pending_md">Pending MD Approval</option>
+                    <option value="pending_hr">Pending HR Approval</option>
+                    <option value="amendment_required">Amendment Needed</option>
                     <option value="approved">Approved</option>
                     <option value="rejected">Rejected</option>
                 </select>
             </div>
 
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden text-black">
                 {loading ? (
                     <div className="p-10 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brandYellow" /></div>
                 ) : (
@@ -2190,7 +2227,7 @@ function GlobalRequisitionsView({ tenants }: { tenants: any[] }) {
                         <table className="w-full">
                             <thead>
                                 <tr className="border-b border-gray-50 bg-gray-50/60">
-                                    {['Requisition', 'Company', 'Department', 'Requester', 'Status', 'Action'].map(h => (
+                                    {['Requisition', 'Company', 'Department', 'Requester', 'Status', 'Actions'].map(h => (
                                         <th key={h} className="px-5 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">{h}</th>
                                     ))}
                                 </tr>
@@ -2204,29 +2241,58 @@ function GlobalRequisitionsView({ tenants }: { tenants: any[] }) {
                                         <td className="px-5 py-3.5">
                                             <div className="flex flex-col">
                                                 <span className="font-semibold text-gray-800 text-sm">{req.title}</span>
-                                                <span className="text-[10px] text-gray-400">REQ{req.id}</span>
+                                                <span className="text-[10px] text-gray-400">REQ{String(req.id).padStart(4, '0')}</span>
                                             </div>
                                         </td>
                                         <td className="px-5 py-3.5">
-                                            <span className="text-sm text-gray-600">{req.tenant?.name || '—'}</span>
+                                            <span className="text-sm text-gray-600 font-medium">{req.tenant?.name || '—'}</span>
                                         </td>
-                                        <td className="px-5 py-3.5 text-sm text-gray-500">{req.department}</td>
-                                        <td className="px-5 py-3.5 text-sm text-gray-500">{req.requester?.name || '—'}</td>
+                                        <td className="px-5 py-3.5 text-sm text-gray-500 font-medium">{req.department}</td>
+                                        <td className="px-5 py-3.5 text-sm text-gray-500 font-medium">{req.requester?.name || '—'}</td>
                                         <td className="px-5 py-3.5">
-                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${statusColor[req.status] || 'border-gray-200'}`}>
-                                                {req.status}
-                                            </span>
+                                            <div className="flex flex-col gap-1">
+                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border text-center ${statusColor[req.status] || 'border-gray-200'}`}>
+                                                    {req.status.replace('_', ' ')}
+                                                </span>
+                                                {req.status === 'amendment_required' && req.amendment_comment && (
+                                                    <p className="text-[10px] text-purple-500 italic max-w-[150px] truncate" title={req.amendment_comment}>&quot;{req.amendment_comment}&quot;</p>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-5 py-3.5">
-                                            {req.status === 'pending' && (
-                                                <button
-                                                    onClick={() => handleApprove(req.id)}
-                                                    disabled={actionLoading === req.id}
-                                                    className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-100 transition"
-                                                >
-                                                    {actionLoading === req.id ? '...' : <Check size={12} />} Approve
-                                                </button>
-                                            )}
+                                            <div className="flex items-center gap-2">
+                                                {/* MD Actions */}
+                                                {(isAdmin || isMD) && req.status === 'pending_md' && (
+                                                    <>
+                                                        <button
+                                                            onClick={() => handleApprove(req.id)}
+                                                            disabled={actionLoading === req.id}
+                                                            className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-100 transition shadow-sm"
+                                                        >
+                                                            {actionLoading === req.id ? '...' : <Check size={12} />} Approve
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setShowAmendModal(req)}
+                                                            className="flex items-center gap-1.5 text-[10px] font-black text-purple-600 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-lg border border-purple-100 transition shadow-sm"
+                                                        >
+                                                            Amend
+                                                        </button>
+                                                    </>
+                                                )}
+
+                                                {/* HR Actions */}
+                                                {(isAdmin || isHR) && req.status === 'pending_hr' && (
+                                                    <button
+                                                        onClick={() => handleApprove(req.id)}
+                                                        disabled={actionLoading === req.id}
+                                                        className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-100 transition shadow-sm"
+                                                    >
+                                                        {actionLoading === req.id ? '...' : <CheckCircle2 size={12} />} Final Approve
+                                                    </button>
+                                                )}
+
+                                                {req.status === 'approved' && <span className="text-[10px] font-black text-emerald-500 flex items-center gap-1 uppercase"><CheckCircle2 size={12} /> Ready to Post</span>}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -2235,6 +2301,48 @@ function GlobalRequisitionsView({ tenants }: { tenants: any[] }) {
                     </div>
                 )}
             </div>
+
+            {/* Amendment Modal */}
+            {showAmendModal && (
+                <div className="fixed inset-0 bg-[#000000]/60 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="px-8 py-6 border-b border-gray-100 flex items-center justify-between bg-purple-50/50">
+                            <div>
+                                <p className="text-purple-600 text-[10px] font-black uppercase tracking-widest mb-1">Feedback Loop</p>
+                                <h3 className="font-black text-gray-900 text-xl tracking-tight">Request Amendments</h3>
+                            </div>
+                            <button onClick={() => setShowAmendModal(null)} className="text-gray-400 hover:text-gray-700 transition p-2 hover:bg-white rounded-full"><X size={20} /></button>
+                        </div>
+                        <div className="p-8">
+                            <p className="text-xs text-gray-500 font-medium mb-4 leading-relaxed">
+                                Provide feedback to the <strong>General Manager</strong> regarding this requisition for &quot;{showAmendModal.title}&quot;. This will unlock the requisition for editing.
+                            </p>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Mandatory Feedback 💬</label>
+                            <textarea
+                                className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500/20 outline-none transition-all h-32 resize-none placeholder:text-gray-300 font-medium"
+                                placeholder="e.g. Please adjust the salary range, or the role should be onsite..."
+                                value={amendmentComment}
+                                onChange={e => setAmendmentComment(e.target.value)}
+                            />
+                            <div className="flex gap-4 mt-8">
+                                <button
+                                    onClick={() => setShowAmendModal(null)}
+                                    className="flex-1 py-4 text-xs font-black uppercase tracking-widest text-gray-400 hover:bg-gray-50 rounded-2xl transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleAmend}
+                                    disabled={!amendmentComment.trim() || actionLoading === showAmendModal.id}
+                                    className="flex-1 py-4 bg-[#0A0A0A] text-brandYellow text-xs font-black uppercase tracking-widest rounded-2xl hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-brandYellow/10 border border-white/5 disabled:opacity-50"
+                                >
+                                    {actionLoading === showAmendModal.id ? 'Sending...' : 'Send Feedback'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

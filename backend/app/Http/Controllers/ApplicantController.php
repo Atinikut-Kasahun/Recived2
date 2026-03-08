@@ -7,6 +7,8 @@ use App\Models\JobPosting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Notifications\ApplicantStatusUpdated;
+use App\Notifications\DirectMessage;
 
 class ApplicantController extends Controller
 {
@@ -29,23 +31,69 @@ class ApplicantController extends Controller
 
         if ($request->has('status') && $request->status !== 'ALL') {
             if ($request->status === 'active') {
-                $query->whereIn('status', ['new', 'interview', 'offer']);
+                $query->whereIn('status', ['new', 'written_exam', 'technical_interview', 'final_interview', 'interview', 'offer']);
             } else {
                 $query->where('status', $request->status);
             }
         }
 
-        if ($request->has('job_id') && $request->job_id !== 'All') {
+        if ($request->has('job_id') && $request->job_id !== 'All' && $request->job_id !== 'ALL') {
             $query->where('job_posting_id', $request->job_id);
         }
 
-        if ($request->has('search')) {
+        // New Filters
+        if ($request->has('experience') && $request->experience !== 'All') {
+            if ($request->experience === 'under_1' || $request->experience === '0-1') {
+                $query->where('years_of_experience', '<', 1);
+            } elseif ($request->experience === '1-3') {
+                $query->whereBetween('years_of_experience', [1, 3]);
+            } elseif ($request->experience === '3-5') {
+                $query->whereBetween('years_of_experience', [3, 5]);
+            } elseif ($request->experience === '5-10') {
+                $query->whereBetween('years_of_experience', [5, 10]);
+            } elseif ($request->experience === '10+') {
+                $query->where('years_of_experience', '>', 10);
+            }
+        }
+
+        if ($request->has('department') && $request->department !== 'All') {
+            $query->whereHas('jobPosting', function ($q) use ($request) {
+                $q->where('department', $request->department);
+            });
+        }
+
+        if ($request->has('gender') && $request->gender !== 'All') {
+            $query->where('gender', $request->gender);
+        }
+
+        if ($request->has('min_score') && $request->min_score > 0) {
+            $query->where(function ($q) use ($request) {
+                $q->where('written_exam_score', '>=', $request->min_score)
+                    ->orWhere('technical_interview_score', '>=', $request->min_score);
+            });
+        }
+
+        if ($request->has('search') && !empty($request->search)) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'LIKE', "%{$search}%")
                     ->orWhere('email', 'LIKE', "%{$search}%")
-                    ->orWhere('phone', 'LIKE', "%{$search}%");
+                    ->orWhere('phone', 'LIKE', "%{$search}%")
+                    ->orWhereHas('jobPosting', function ($jq) use ($search) {
+                        $jq->where('title', 'LIKE', "%{$search}%")
+                            ->orWhere('department', 'LIKE', "%{$search}%");
+                    });
             });
+        }
+
+        if ($request->has('applied_on') && $request->applied_on !== 'All') {
+            $days = (int) $request->applied_on;
+            $query->where('created_at', '>=', now()->subDays($days));
+        }
+
+        if ($request->has('hired_on') && $request->hired_on !== 'All') {
+            $days = (int) $request->hired_on;
+            $query->where('hired_at', '>=', now()->subDays($days));
         }
 
         $applicants = $query->paginate($request->get('limit', 15));
@@ -86,8 +134,16 @@ class ApplicantController extends Controller
     /**
      * Display the specified applicant.
      */
-    public function show(Applicant $applicant): JsonResponse
+    public function show($id, Request $request): JsonResponse
     {
+        $applicant = Applicant::findOrFail($id);
+        $user = $request->user();
+
+        // Security Check
+        if (!$user->hasRole('admin') && $applicant->tenant_id !== $user->tenant_id) {
+            return response()->json(['error' => 'Unauthorized access to applicant data.'], 403);
+        }
+
         return response()->json($applicant->load(['jobPosting', 'tenant', 'interviews']));
     }
 
@@ -97,11 +153,45 @@ class ApplicantController extends Controller
     public function updateStatus(Request $request, $id): JsonResponse
     {
         $request->validate([
-            'status' => 'required|string|in:new,screening,interview,offer,hired,rejected',
+            'status' => 'required|string|in:new,written_exam,technical_interview,final_interview,offer,hired,rejected',
+            'written_exam_score' => 'nullable|numeric',
+            'technical_interview_score' => 'nullable|numeric',
+            'interviewer_feedback' => 'nullable|string',
+            'exam_paper' => 'nullable|file|mimes:pdf,doc,docx,jpg,png,jpeg|max:10240', // 10MB max
         ]);
 
         $applicant = Applicant::findOrFail($id);
-        $applicant->update(['status' => $request->status]);
+        $user = $request->user();
+
+        // Security Check
+        if (!$user->hasRole('admin') && $applicant->tenant_id !== $user->tenant_id) {
+            return response()->json(['error' => 'Unauthorized: Cross-tenant modification denied.'], 403);
+        }
+
+        $data = $request->only([
+            'status',
+            'written_exam_score',
+            'technical_interview_score',
+            'interviewer_feedback'
+        ]);
+
+        if ($request->hasFile('exam_paper')) {
+            $file = $request->file('exam_paper');
+            $path = $file->store('exam_papers', 'public');
+            $data['exam_paper_path'] = $path;
+        }
+
+        if ($request->status === 'hired' && $applicant->status !== 'hired') {
+            $data['hired_at'] = now();
+        }
+
+        $oldStatus = $applicant->status;
+        $applicant->update($data);
+
+        // Notify applicant if status or scores changed
+        if ($oldStatus !== $applicant->status || $request->has('written_exam_score') || $request->has('technical_interview_score')) {
+            $applicant->notify(new ApplicantStatusUpdated($applicant, $oldStatus, $applicant->status));
+        }
 
         return response()->json($applicant);
     }
@@ -112,8 +202,24 @@ class ApplicantController extends Controller
             'message' => 'required|string',
         ]);
 
-        // Logic for mentions (notifications, etc.)
-        return response()->json(['message' => 'Mention sent successfully']);
+        $applicant = Applicant::findOrFail($id);
+        $user = $request->user();
+
+        // Security Check
+        if (!$user->hasRole('admin') && $applicant->tenant_id !== $user->tenant_id) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Notify applicant via portal (treating mention as a direct message from TA)
+        $applicant->notify(new DirectMessage(
+            $user->name,
+            $user->id,
+            $request->message,
+            $applicant->name,
+            $applicant->id
+        ));
+
+        return response()->json(['message' => 'Notification sent to applicant successfully']);
     }
 
     public function stats(Request $request): JsonResponse
@@ -163,7 +269,9 @@ class ApplicantController extends Controller
         $funnelStats = (clone $query)
             ->selectRaw("
                 COUNT(*) as total,
-                SUM(CASE WHEN applicants.status = 'interview' THEN 1 ELSE 0 END) as interview,
+                SUM(CASE WHEN applicants.status = 'written_exam' THEN 1 ELSE 0 END) as written_exam,
+                SUM(CASE WHEN applicants.status = 'technical_interview' THEN 1 ELSE 0 END) as technical_interview,
+                SUM(CASE WHEN applicants.status = 'final_interview' THEN 1 ELSE 0 END) as final_interview,
                 SUM(CASE WHEN applicants.status = 'offer' THEN 1 ELSE 0 END) as offer,
                 SUM(CASE WHEN applicants.status = 'hired' THEN 1 ELSE 0 END) as hired
             ")->first();

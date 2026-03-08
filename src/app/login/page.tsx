@@ -145,7 +145,8 @@ export default function LoginPage() {
                             {[
                                 { label: 'Global Admin', email: 'admin@droga.com' },
                                 { label: 'HR Manager', email: 'hr.droga@droga.com' },
-                                { label: 'Pharma DM', email: 'dm.pharma@droga.com' },
+                                { label: 'Pharma MD', email: 'md.droga-pharma@droga.com' },
+                                { label: 'Pharma GM', email: 'gm.droga-pharma@droga.com' },
                                 { label: 'Pharma TA', email: 'ta.droga-pharma@droga.com' },
                                 { label: 'Physio TA', email: 'ta.droga-physiotherapy@droga.com' },
                                 { label: 'Health TA', email: 'ta.droga-health@droga.com' },

@@ -1,9 +1,25 @@
 ﻿'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiFetch, API_URL } from '@/lib/api';
+import { CheckCircle2, Search } from 'lucide-react';
+
+/* ─── Toast ─────────────────────────────────────────────── */
+function Toast({ msg, type }: { msg: string; type: 'success' | 'error' }) {
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className={`fixed bottom-8 right-8 z-[200] px-6 py-4 rounded-2xl shadow-2xl text-[13px] font-black uppercase tracking-widest text-[#FDF22F] flex items-center gap-3 border border-[#FDF22F]/20 bg-black animate-in slide-in-from-bottom-5 duration-300`}
+        >
+            <CheckCircle2 size={18} className="text-[#FDF22F]" />
+            <span>{msg}</span>
+        </motion.div>
+    );
+}
 
 export default function TADashboard({ user, activeTab: initialTab, onLogout }: { user: any; activeTab: string; onLogout: () => void }) {
     const [jobs, setJobs] = useState<any[] | null>(null);
@@ -29,14 +45,24 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
     const [reportFilters, setReportFilters] = useState({ dateRange: '30', department: 'All', jobId: 'All' });
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [interviewsList, setInterviewsList] = useState<any[]>([]);
+    const [applicantFilters, setApplicantFilters] = useState({ experience: 'All', department: 'All', gender: 'All', minScore: '' });
+    const [jobFilters, setJobFilters] = useState({ position: '', location: 'All', department: 'All', status: 'All' });
+    const [employeeFilters, setEmployeeFilters] = useState({ experience: 'All', department: 'All', search: '', jobId: 'All', hiredOn: 'All', appliedOn: 'All' });
+    const [hiringPlanFilters, setHiringPlanFilters] = useState({ location: 'All', department: 'All', salaryRange: 'All', submittedOn: 'All', portal: 'All', status: 'All', search: '' });
 
     // Interview Scheduling Modal State
     const [scheduleModal, setScheduleModal] = useState(false);
     const [scheduleForm, setScheduleForm] = useState({ date: '', time: '', type: 'video', location: '', interviewer_id: '', message: '' });
 
+    // Scoring & Results Modal State
+    const [scoringModal, setScoringModal] = useState(false);
+    const [scoringForm, setScoringForm] = useState({ written_exam_score: '', technical_interview_score: '', interviewer_feedback: '', exam_paper: null as File | null });
+
     // Notifications & Mentions
     const [mentionUser, setMentionUser] = useState('');
     const [mentionNote, setMentionNote] = useState('');
+    const [candidateViewMode, setCandidateViewMode] = useState<'table' | 'grid'>('table');
+    const [itemsPerPage, setItemsPerPage] = useState(10);
     const [mentionLoading, setMentionLoading] = useState(false);
     const [mentionSuccess, setMentionSuccess] = useState(false);
     const [departmentUsers, setDepartmentUsers] = useState<any[]>([]);
@@ -51,6 +77,38 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
     const [employeeStatusForm, setEmployeeStatusForm] = useState({ status: 'active', reason: '', date: '' });
     const [employees, setEmployees] = useState<any[] | null>(null);
     const [employeesPagination, setEmployeesPagination] = useState<any>(null);
+    const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+    const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [pinnedNotifications, setPinnedNotifications] = useState<any[]>([]);
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [debouncedEmployeeSearch, setDebouncedEmployeeSearch] = useState('');
+    const [debouncedHiringPlanSearch, setDebouncedHiringPlanSearch] = useState('');
+    const [hiringPlanKpis, setHiringPlanKpis] = useState<any>(null);
+
+    // Debounce global search
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(search), 500);
+        return () => clearTimeout(timer);
+    }, [search]);
+
+    // Debounce employee-specific search
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedEmployeeSearch(employeeFilters.search), 500);
+        return () => clearTimeout(timer);
+    }, [employeeFilters.search]);
+
+    // Debounce hiring plan search
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedHiringPlanSearch(hiringPlanFilters.search), 500);
+        return () => clearTimeout(timer);
+    }, [hiringPlanFilters.search]);
+
+
+    const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+        setToast({ msg, type });
+        setTimeout(() => setToast(null), 4000);
+    };
 
     useEffect(() => {
         if (drawerApp) {
@@ -137,14 +195,9 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
         }
     };
 
-    // Refetch when filters change
-    useEffect(() => {
-        if (initialTab === 'Reports') {
-            fetchData(1);
-        }
-    }, [reportFilters]);
 
-    const fetchData = async (page = 1) => {
+
+    const fetchData = useCallback(async (page = 1) => {
         setLoading(true);
         try {
             // --- REPORTS TAB: only fetch stats, skip all other expensive calls ---
@@ -170,11 +223,30 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
             }
 
             if (initialTab === 'Employees') {
-                const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
                 if (subTab === 'HIRED' || subTab === 'ACTIVE') {
                     // Fetch Pipeline/Newly Hired (Applicants)
                     const statusParam = subTab === 'HIRED' ? 'hired' : 'active';
-                    const appsResponse = await apiFetch(`/v1/applicants?page=${page}&status=${statusParam}${searchParam}`);
+                    const params = new URLSearchParams({
+                        page: page.toString(),
+                        status: statusParam,
+                        search: debouncedEmployeeSearch || debouncedSearch || '', // Use debounced values
+                        experience: employeeFilters.experience,
+                        department: employeeFilters.department,
+                        job_id: employeeFilters.jobId,
+                        hired_on: employeeFilters.hiredOn,
+                        applied_on: employeeFilters.appliedOn
+                    });
+                    const [appsResponse, jobsResponse] = await Promise.all([
+                        apiFetch(`/v1/applicants?${params.toString()}`),
+                        apiFetch('/v1/jobs?page=1&limit=100') // Fetch all active jobs for filters
+                    ]);
+
+                    if (jobsResponse?.data) {
+                        setJobs(jobsResponse.data);
+                    } else if (jobsResponse) {
+                        setJobs(jobsResponse);
+                    }
+
                     if (appsResponse?.data) {
                         setApplicants(appsResponse.data);
                         setApplicantsPagination({
@@ -192,7 +264,23 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                 } else {
                     // Fetch Staff (STAFF or SEPARATED)
                     const empStatus = subTab === 'SEPARATED' ? 'resigned' : 'active';
-                    const employeesResponse = await apiFetch(`/v1/employees?page=${page}&status=${empStatus}${searchParam}`);
+                    const params = new URLSearchParams({
+                        page: page.toString(),
+                        status: empStatus,
+                        search: debouncedEmployeeSearch || debouncedSearch || '', // Use debounced values
+                        department: employeeFilters.department
+                    });
+                    const [employeesResponse, jobsResponse] = await Promise.all([
+                        apiFetch(`/v1/employees?${params.toString()}`),
+                        apiFetch('/v1/jobs?page=1&limit=100')
+                    ]);
+
+                    if (jobsResponse?.data) {
+                        setJobs(jobsResponse.data);
+                    } else if (jobsResponse) {
+                        setJobs(jobsResponse);
+                    }
+
                     if (employeesResponse?.data) {
                         setEmployees(employeesResponse.data);
                         setEmployeesPagination({
@@ -221,9 +309,14 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
             } else if (initialTab === 'Jobs') {
                 // Jobs tab: only fetch jobs — no applicants or requisitions needed here
                 const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
-                // Default to 'active' if subTab isn't explicitly 'ARCHIVED'
-                const statusQuery = subTab === 'ARCHIVED' ? 'archived' : 'active';
-                const jobsQuery = `/v1/jobs?page=${page}&status=${statusQuery}${searchParam}`;
+                const posParam = jobFilters.position ? `&position=${encodeURIComponent(jobFilters.position)}` : '';
+                const locParam = jobFilters.location !== 'All' ? `&location=${encodeURIComponent(jobFilters.location)}` : '';
+                const deptParam = jobFilters.department !== 'All' ? `&department=${encodeURIComponent(jobFilters.department)}` : '';
+
+                // If the user uses the 'Status' filter in the dropdown, pass that to the backend. Otherwise, respect the SUBTAB default.
+                const statusQuery = jobFilters.status !== 'All' ? jobFilters.status : (subTab === 'ARCHIVED' ? 'archived' : 'active');
+
+                const jobsQuery = `/v1/jobs?page=${page}&status=${encodeURIComponent(statusQuery)}${searchParam}${posParam}${locParam}${deptParam}`;
                 const jobsResponse = await apiFetch(jobsQuery);
                 if (jobsResponse?.data) {
                     setJobs(jobsResponse.data);
@@ -241,20 +334,48 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                 }
             } else if (initialTab === 'HiringPlan') {
                 // Hiring Plan: only fetch requisitions
-                const reqsResponse = await apiFetch('/v1/requisitions');
+                const params = new URLSearchParams({
+                    search: debouncedHiringPlanSearch || debouncedSearch || '',
+                    location: hiringPlanFilters.location,
+                    department: hiringPlanFilters.department,
+                    salary_range: hiringPlanFilters.salaryRange,
+                    status: hiringPlanFilters.status,
+                    submitted_on: hiringPlanFilters.submittedOn,
+                    portal: hiringPlanFilters.portal
+                });
+                const reqsResponse = await apiFetch(`/v1/requisitions?${params.toString()}`);
                 setRequisitions(reqsResponse?.data || []);
+                setHiringPlanKpis(reqsResponse?.kpis || null);
             } else {
                 // Candidates, Employees, and other tabs: fetch applicants + jobs (for filter dropdowns)
                 const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
                 const currentStatus = (() => {
-                    const m: { [k: string]: string } = { 'NEW': 'new', 'INTERVIEWS': 'interview', 'OFFERS': 'offer', 'REJECTED': 'rejected', 'HIRED': 'hired', 'ACTIVE': 'active', 'ARCHIVED': 'archived', 'REQUISITIONS': 'ALL', 'OVERVIEW': 'ALL' };
+                    const m: { [k: string]: string } = {
+                        'NEW': 'new',
+                        'WRITTEN EXAM': 'written_exam',
+                        'TECHNICAL INTERVIEW': 'technical_interview',
+                        'FINAL INTERVIEW': 'final_interview',
+                        'OFFERS': 'offer',
+                        'REJECTED': 'rejected',
+                        'HIRED': 'hired',
+                        'ACTIVE': 'active',
+                        'ARCHIVED': 'archived',
+                        'REQUISITIONS': 'ALL',
+                        'OVERVIEW': 'ALL'
+                    };
                     return m[subTab] ?? 'ALL';
                 })();
                 const statusParam = currentStatus !== 'ALL' ? `&status=${currentStatus}` : '';
+                const filterParams = new URLSearchParams({
+                    experience: applicantFilters.experience,
+                    department: applicantFilters.department,
+                    gender: applicantFilters.gender,
+                    min_score: applicantFilters.minScore
+                }).toString();
 
                 const [jobsResponse, appsResponse] = await Promise.all([
-                    apiFetch(`/v1/jobs?page=1`),
-                    apiFetch(`/v1/applicants?page=${page}${statusParam}${searchParam}`),
+                    apiFetch(`/v1/jobs?page=1&limit=100`),
+                    apiFetch(`/v1/applicants?page=${page}${statusParam}${searchParam}&limit=${itemsPerPage}&${filterParams}`),
                 ]);
 
                 if (jobsResponse?.data) {
@@ -278,6 +399,12 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                     setApplicants(appsResponse || []);
                     setApplicantsPagination(null);
                 }
+
+                // --- FETCH PINNED NOTIFICATIONS ---
+                const notifsResponse = await apiFetch('/v1/notifications');
+                if (notifsResponse?.notifications) {
+                    setPinnedNotifications(notifsResponse.notifications.filter((n: any) => n.is_pinned));
+                }
             }
         } catch (err: any) {
             console.error('Failed to fetch dashboard data', err);
@@ -285,15 +412,26 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
         } finally {
             setLoading(false);
         }
-    };
+    }, [initialTab, subTab, debouncedSearch, jobFilters, reportFilters, employeeFilters, debouncedEmployeeSearch, hiringPlanFilters, debouncedHiringPlanSearch]);
+
+
+    // Refetch when filters change
+    useEffect(() => {
+        if (initialTab === 'Reports' || initialTab === 'Jobs') {
+            fetchData(1);
+        }
+    }, [reportFilters, jobFilters, initialTab, fetchData]);
 
     useEffect(() => {
         // Reset loading and clear data when tab changes to prevent "No Results" flicker
         setLoading(true);
-        setJobs(null);
+        // Keep jobs/stats if they exist to avoid filter flicker, only clear content
         setApplicants(null);
         setRequisitions(null);
-        setStats(null);
+        setEmployees(null);
+        // setStats(null); // Keep stats for a bit for smoother transition
+        // setJobs(null); // DO NOT CLEAR JOBS, they are needed for filters across tabs!
+
 
         // Default sub-tab when global category changes
         if (initialTab === 'Candidates') setSubTab('NEW');
@@ -307,8 +445,8 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
     }, [initialTab]);
 
     useEffect(() => {
-        fetchData(1);
-    }, [initialTab, subTab, search]);
+        fetchData();
+    }, [initialTab, subTab, debouncedSearch, applicantFilters, employeeFilters, debouncedEmployeeSearch, hiringPlanFilters, debouncedHiringPlanSearch, itemsPerPage]);
 
 
     const handlePostJob = async (req: any) => {
@@ -320,13 +458,14 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                 body: JSON.stringify({
                     job_requisition_id: req.id,
                     title: req.title,
-                    description: req.description || `New opening for ${req.title} in ${req.department} department.`,
+                    description: req.jd_content || req.description || `New opening for ${req.title} in ${req.department} department.`,
                     location: req.location,
                     type: 'full-time',
                     deadline: postJobDeadline,
                 }),
             });
             setDrawerReq(null);
+            showToast('Job Posted to Public Portal successfully!', 'success');
             fetchData();
             setPostJobDeadline("");
         } catch (e) {
@@ -344,10 +483,24 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: newStatus }),
             });
+
+            // Professional success message mapping
+            const statusLabels: { [key: string]: string } = {
+                'written_exam': 'Written Exam stage',
+                'technical_interview': 'Technical Interview stage',
+                'final_interview': 'Final Interview stage',
+                'offer': 'Offer stage',
+                'hired': 'Hired status',
+                'rejected': 'Rejected'
+            };
+            const label = statusLabels[newStatus] || newStatus;
+            showToast(`Candidate successfully moved to ${label}`, 'success');
+
             setDrawerApp(null);
             fetchData(currentPage);
         } catch (e) {
             console.error(e);
+            showToast('Failed to update candidate status', 'error');
         } finally {
             setActionLoading(false);
         }
@@ -373,19 +526,63 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                 }),
             });
 
-            // Also update applicant status to interview
+            // Also update applicant status to technical_interview
             await apiFetch(`/v1/applicants/${drawerApp.id}/status`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'interview' }),
+                body: JSON.stringify({ status: 'technical_interview' }),
             });
 
-            setDrawerApp((prev: any) => ({ ...prev, status: 'interview' }));
+            showToast(`Interview successfully scheduled for ${drawerApp.name}`, 'success');
+            setDrawerApp((prev: any) => ({ ...prev, status: 'technical_interview' }));
             setScheduleModal(false);
             setScheduleForm({ date: '', time: '', type: 'video', location: '', interviewer_id: '', message: '' });
             fetchData(currentPage);
         } catch (e) {
             console.error(e);
+            showToast('Failed to schedule interview', 'error');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleUpdateScores = async (advanceToStatus?: string) => {
+        setActionLoading(true);
+        try {
+            const formData = new FormData();
+            formData.append('_method', 'PATCH');
+            formData.append('status', advanceToStatus || drawerApp.status);
+            formData.append('written_exam_score', scoringForm.written_exam_score);
+            formData.append('technical_interview_score', scoringForm.technical_interview_score);
+            formData.append('interviewer_feedback', scoringForm.interviewer_feedback);
+
+            if (scoringForm.exam_paper) {
+                formData.append('exam_paper', scoringForm.exam_paper);
+            }
+
+            const res = await apiFetch(`/v1/applicants/${drawerApp.id}/status`, {
+                method: 'POST', // Use POST with _method: PATCH for Laravel file uploads
+                body: formData,
+            });
+
+            setDrawerApp(res);
+            setScoringModal(false);
+
+            if (advanceToStatus) {
+                const statusLabels: { [key: string]: string } = {
+                    'technical_interview': 'Technical Interview',
+                    'final_interview': 'Final Interview',
+                    'offer': 'Offer'
+                };
+                showToast(`Scores saved & candidate moved to ${statusLabels[advanceToStatus] || advanceToStatus}`, 'success');
+            } else {
+                showToast('Scores saved successfully!', 'success');
+            }
+
+            fetchData(currentPage);
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to save scores', 'error');
         } finally {
             setActionLoading(false);
         }
@@ -405,12 +602,14 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                     offer_notes: offerForm.notes,
                 }),
             });
+            showToast(`Offer letter has been successfully sent to ${drawerApp.name}`, 'success');
             setDrawerApp((prev: any) => ({ ...prev, status: 'offer' }));
             setOfferModal(false);
             setOfferForm({ salary: '', startDate: '', notes: '' });
             fetchData(currentPage);
         } catch (e) {
             console.error(e);
+            showToast('Failed to send offer letter', 'error');
         } finally {
             setActionLoading(false);
         }
@@ -424,12 +623,14 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: 'rejected', rejection_note: rejectionNote }),
             });
+            showToast(`Application for ${drawerApp.name} has been closed/rejected`, 'success');
             setDrawerApp((prev: any) => ({ ...prev, status: 'rejected' }));
             setRejectModal(false);
             setRejectionNote('');
             fetchData(currentPage);
         } catch (e) {
             console.error(e);
+            showToast('Failed to process rejection', 'error');
         } finally {
             setActionLoading(false);
         }
@@ -443,9 +644,28 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: newStatus }),
             });
+            showToast(`Job status updated to ${newStatus} successfully!`, 'success');
             fetchData();
         } catch (e) {
             console.error(e);
+            showToast('Failed to update job status', 'error');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleDeleteJob = async (jobId: string) => {
+        setActionLoading(true);
+        try {
+            await apiFetch(`/v1/jobs/${jobId}`, {
+                method: 'DELETE'
+            });
+            showToast('Job posting deleted successfully!', 'success');
+            setDeleteConfirmId(null);
+            fetchData();
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to delete job posting', 'error');
         } finally {
             setActionLoading(false);
         }
@@ -528,10 +748,12 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                         };
                         const subLabels: { [key: string]: string } = {
                             'NEW': 'New',
-                            'INTERVIEWS': 'Interviews',
+                            'WRITTEN EXAM': 'Written Exam',
+                            'TECHNICAL INTERVIEW': 'Technical Interview',
+                            'FINAL INTERVIEW': 'Final Interview',
                             'OFFERS': 'Offers',
                             'REJECTED': 'Rejected',
-                            'HIRED': 'Newly Hired',
+                            'HIRED': 'Hired',
                             'ACTIVE': 'Active Pipeline',
                             'STAFF': 'Professional Staff',
                             'SEPARATED': 'Separated Staff',
@@ -562,7 +784,7 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                     <div className="flex gap-10 border-b border-gray-100 mt-2">
                         {(() => {
                             let items: string[] = [];
-                            if (initialTab === 'Candidates') items = ['NEW', 'INTERVIEWS', 'OFFERS', 'REJECTED'];
+                            if (initialTab === 'Candidates') items = ['NEW', 'WRITTEN EXAM', 'TECHNICAL INTERVIEW', 'FINAL INTERVIEW', 'OFFERS', 'HIRED', 'REJECTED'];
                             else if (initialTab === 'Jobs' || initialTab === 'HiringPlan') items = ['JOBS', 'HIRING PLAN'];
                             else if (initialTab === 'Employees') items = ['HIRED', 'ACTIVE', 'STAFF', 'SEPARATED'];
                             else if (initialTab === 'Reports') items = ['OVERVIEW'];
@@ -621,6 +843,54 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
 
             </div>
 
+            {/* Pinned Alerts Section */}
+            <AnimatePresence>
+                {pinnedNotifications.length > 0 && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        className="mx-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10"
+                    >
+                        {pinnedNotifications.map((notif) => (
+                            <div key={notif.id} className="bg-white p-5 rounded-3xl border border-[#FDF22F]/40 shadow-xl shadow-[#FDF22F]/5 relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-24 h-24 bg-[#FDF22F]/5 -mr-12 -mt-12 rounded-full blur-2xl group-hover:bg-[#FDF22F]/10 transition-colors" />
+                                <div className="flex items-start gap-4">
+                                    <div className="w-10 h-10 rounded-2xl bg-[#FDF22F] flex items-center justify-center shrink-0 shadow-lg shadow-[#FDF22F]/20">
+                                        <svg className="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 5h14l-4 4v7l-3 3-3-3v-7L5 5z" />
+                                        </svg>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <p className="text-[10px] font-black text-[#FDF22F] bg-black px-2 py-0.5 rounded-lg uppercase tracking-widest">Pinned Workspace Alert</p>
+                                            <button
+                                                onClick={async () => {
+                                                    await apiFetch(`/v1/notifications/${notif.id}/pin`, { method: 'POST' });
+                                                    setPinnedNotifications(prev => prev.filter(n => n.id !== notif.id));
+                                                }}
+                                                className="text-gray-300 hover:text-red-500 transition-colors"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </button>
+                                        </div>
+                                        <h3 className="text-sm font-black text-black leading-tight mb-1">{notif.data.title}</h3>
+                                        <p className="text-[11px] text-gray-500 leading-relaxed line-clamp-2">{notif.data.message}</p>
+                                        <div className="flex items-center gap-2 mt-3">
+                                            <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[8px] font-black text-black">
+                                                {notif.data.sender_name?.charAt(0) || 'S'}
+                                            </div>
+                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                                                {notif.data.sender_name || 'System'} · {new Date(notif.created_at).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
             {/* Content Table */}
             {loading ? (
                 initialTab === 'Jobs' ? (
@@ -656,121 +926,202 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                     </div>
                 )
             ) : initialTab === 'Jobs' ? (
-                <div className="bg-white rounded border border-gray-100 shadow-sm overflow-hidden min-h-[400px]">
-                    <table className="w-full text-left">
-                        <thead className="bg-[#F9FAFB] border-b border-gray-100">
-                            <tr>
-                                {['POSITION', 'LOCATION', 'DEPARTMENT', 'STATUS', 'ACTIONS'].map(h => (
-                                    <th key={h} className="px-8 py-4 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {jobs === null ? null : jobs.length === 0 ? (
-                                <tr><td colSpan={5} className="px-8 py-20 text-center text-gray-400 italic text-sm">No {subTab.toLowerCase()} jobs found for {user.tenant?.name || 'this company'}.</td></tr>
-                            ) : jobs.map((job: any) => (
-                                <tr key={job.id} className="hover:bg-gray-50 transition-colors cursor-pointer group">
-                                    <td className="px-8 py-6">
-                                        <p className="font-bold text-[#000000] group-hover:text-[#000000] transition-colors">{job.title}</p>
-                                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
-                                            {job.published_at && (() => {
-                                                const d = new Date(job.published_at);
-                                                const now = new Date();
-                                                const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-                                                const relative = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Yesterday' : `${diffDays}d ago`;
-                                                return <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Posted {relative}</span>;
-                                            })()}
-                                            {job.deadline && (() => {
-                                                const d = new Date(job.deadline);
-                                                const now = new Date();
-                                                const diffTime = d.getTime() - now.getTime();
-                                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                                return (
-                                                    <span className={`text-[10px] font-black uppercase tracking-widest ${diffDays <= 3 ? 'text-red-500 animate-pulse' : 'text-amber-600'}`}>
-                                                        {diffDays <= 0 ? 'Closing Today' : `Closes in ${diffDays}d`}
-                                                    </span>
-                                                );
-                                            })()}
-                                        </div>
-                                    </td>
-                                    <td className="px-8 py-6 text-sm text-gray-500">{job.location || '—'}</td>
-                                    <td className="px-8 py-6 text-sm text-gray-500">
-                                        {job.department || job.requisition?.department || 'General'}
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        <span className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${job.status === 'active' ? 'bg-[#FDF22F] text-black shadow-lg shadow-[#FDF22F]/10' : job.status === 'closed' ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-400'}`}>
-                                            {job.status}
-                                        </span>
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        {job.status === 'active' ? (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleToggleJobStatus(job.id, 'closed'); }}
-                                                className="px-4 py-2 border border-red-200 text-red-600 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-50 transition-all"
-                                            >
-                                                Close Job
-                                            </button>
-                                        ) : job.status === 'closed' ? (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleToggleJobStatus(job.id, 'active'); }}
-                                                className="px-4 py-2 border border-emerald-200 text-emerald-600 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-50 transition-all"
-                                            >
-                                                Re-open
-                                            </button>
-                                        ) : null}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                <div className="flex flex-col gap-6">
+                    {/* Professional Filter Bar for Jobs */}
+                    <div className="px-10 py-5 bg-gray-50/30 border-b border-gray-100 flex items-center gap-6 overflow-x-auto relative z-[10]">
+                        <div className="flex items-center justify-between w-full">
+                            <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Filters</span>
+                                </div>
 
-                    {/* Jobs Pagination Controls */}
-                    {jobsPagination && jobsPagination.last_page > 1 && (
-                        <div className="px-8 py-4 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
-                                    Showing <span className="text-[#000000]">{jobsPagination.from}</span> - <span className="text-[#000000]">{jobsPagination.to}</span> of <span className="text-[#000000]">{jobsPagination.total}</span>
-                                </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => fetchData(currentPage - 1)}
-                                    disabled={currentPage === 1}
-                                    className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-[#000000] hover:border-[#000000] transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
-                                </button>
+                                <div className="flex items-center gap-3">
+                                    {/* Position Search */}
+                                    <div className="relative">
+                                        <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search titles..."
+                                            value={jobFilters.position}
+                                            onChange={(e) => setJobFilters({ ...jobFilters, position: e.target.value })}
+                                            className="bg-white border border-gray-100 rounded-xl pl-9 pr-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all w-48 placeholder:text-gray-400"
+                                        />
+                                    </div>
 
-                                {Array.from({ length: Math.min(5, jobsPagination.last_page) }, (_, i) => {
-                                    let pageNum = currentPage <= 3 ? i + 1 : currentPage + i - 2;
-                                    if (pageNum > jobsPagination.last_page) pageNum = jobsPagination.last_page - (4 - i);
-                                    if (pageNum < 1) pageNum = i + 1;
-                                    if (pageNum > jobsPagination.last_page) return null;
+                                    {/* Dynamic Location Filter */}
+                                    <select
+                                        value={jobFilters.location}
+                                        onChange={(e) => setJobFilters({ ...jobFilters, location: e.target.value })}
+                                        className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all cursor-pointer"
+                                    >
+                                        <option value="All">All Locations</option>
+                                        {Array.from(new Set((jobs || []).map(j => j.location).filter(Boolean))).map(loc => (
+                                            <option key={loc} value={loc}>{loc}</option>
+                                        ))}
+                                    </select>
 
-                                    return (
-                                        <button
-                                            key={pageNum}
-                                            onClick={() => fetchData(pageNum)}
-                                            className={`w-10 h-10 rounded-xl text-[11px] font-black transition-all shadow-sm border ${currentPage === pageNum
-                                                ? 'bg-[#FDF22F] text-black border-[#FDF22F]'
-                                                : 'bg-white text-gray-400 border-gray-200 hover:border-[#FDF22F] hover:text-[#000000]'
-                                                }`}
-                                        >
-                                            {pageNum}
-                                        </button>
-                                    );
-                                })}
+                                    {/* Dynamic Department Filter */}
+                                    <select
+                                        value={jobFilters.department}
+                                        onChange={(e) => setJobFilters({ ...jobFilters, department: e.target.value })}
+                                        className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all cursor-pointer"
+                                    >
+                                        <option value="All">All Departments</option>
+                                        {Array.from(new Set((jobs || []).map(j => j.department || j.requisition?.department).filter(Boolean))).map(dept => (
+                                            <option key={dept} value={dept}>{dept}</option>
+                                        ))}
+                                    </select>
 
-                                <button
-                                    onClick={() => fetchData(currentPage + 1)}
-                                    disabled={currentPage === jobsPagination.last_page}
-                                    className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-[#000000] hover:border-[#000000] transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
-                                </button>
+                                    {/* Status Filter */}
+                                    <select
+                                        value={jobFilters.status}
+                                        onChange={(e) => setJobFilters({ ...jobFilters, status: e.target.value })}
+                                        className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all cursor-pointer"
+                                    >
+                                        <option value="All">All Statuses</option>
+                                        <option value="Active">Active</option>
+                                        <option value="Archived">Archived</option>
+                                    </select>
+
+                                    <button
+                                        onClick={() => setJobFilters({ position: '', location: 'All', department: 'All', status: 'All' })}
+                                        className="text-[10px] font-black text-gray-400 hover:text-black uppercase tracking-widest ml-2 transition-colors flex items-center gap-1.5"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                        Reset
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    )}
+                    </div>
+
+                    <div className="bg-white rounded border border-gray-100 shadow-sm overflow-hidden min-h-[400px]">
+                        <table className="w-full text-left">
+                            <thead className="bg-[#F9FAFB] border-b border-gray-100">
+                                <tr>
+                                    {['POSITION', 'LOCATION', 'DEPARTMENT', 'STATUS', 'ACTIONS'].map(h => (
+                                        <th key={h} className="px-8 py-4 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {jobs === null ? null : jobs.length === 0 ? (
+                                    <tr><td colSpan={5} className="px-8 py-20 text-center text-gray-400 italic text-sm">No {subTab.toLowerCase()} jobs found for {user.tenant?.name || 'this company'}.</td></tr>
+                                ) : jobs.map((job: any) => (
+                                    <tr key={job.id} className="hover:bg-gray-50 transition-colors cursor-pointer group">
+                                        <td className="px-8 py-6">
+                                            <p className="font-bold text-[#000000] group-hover:text-[#000000] transition-colors">{job.title}</p>
+                                            <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                                                {job.published_at && (() => {
+                                                    const d = new Date(job.published_at);
+                                                    const now = new Date();
+                                                    const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+                                                    const relative = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Yesterday' : `${diffDays}d ago`;
+                                                    return <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Posted {relative}</span>;
+                                                })()}
+                                                {job.deadline && (() => {
+                                                    const d = new Date(job.deadline);
+                                                    const now = new Date();
+                                                    const exactDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                                    const diffTime = d.getTime() - now.getTime();
+                                                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                                    return (
+                                                        <span className={`text-[10px] font-black uppercase tracking-widest ${diffDays <= 3 ? 'text-red-500 animate-pulse' : 'text-amber-600'}`}>
+                                                            {exactDate} ({diffDays <= 0 ? 'Today' : `${diffDays}d left`})
+                                                        </span>
+                                                    );
+                                                })()}
+                                            </div>
+                                        </td>
+                                        <td className="px-8 py-6 text-sm text-gray-500">{job.location || '—'}</td>
+                                        <td className="px-8 py-6 text-sm text-gray-500">
+                                            {job.department || job.requisition?.department || 'General'}
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            <span className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${job.status === 'active' ? 'bg-[#FDF22F] text-black shadow-lg shadow-[#FDF22F]/10' : job.status === 'closed' ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-400'}`}>
+                                                {job.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            <div className="flex gap-2">
+                                                {job.status === 'active' ? (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleToggleJobStatus(job.id, 'closed'); }}
+                                                        className="px-4 py-2 border border-red-200 text-red-600 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-50 transition-all"
+                                                    >
+                                                        Close Job
+                                                    </button>
+                                                ) : job.status === 'closed' ? (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleToggleJobStatus(job.id, 'active'); }}
+                                                        className="px-4 py-2 border border-emerald-200 text-emerald-600 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-50 transition-all"
+                                                    >
+                                                        Re-open
+                                                    </button>
+                                                ) : null}
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(job.id); }}
+                                                    className="px-4 py-2 bg-gray-50 text-gray-400 border border-gray-100 rounded-xl hover:bg-red-500 hover:text-white hover:border-red-500 transition-all group/del"
+                                                    title="Delete permanently"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+
+                        {/* Jobs Pagination Controls */}
+                        {jobsPagination && jobsPagination.last_page > 1 && (
+                            <div className="px-8 py-4 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
+                                        Showing <span className="text-[#000000]">{jobsPagination.from}</span> - <span className="text-[#000000]">{jobsPagination.to}</span> of <span className="text-[#000000]">{jobsPagination.total}</span>
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => fetchData(currentPage - 1)}
+                                        disabled={currentPage === 1}
+                                        className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-[#000000] hover:border-[#000000] transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
+                                    </button>
+
+                                    {Array.from({ length: Math.min(5, jobsPagination.last_page) }, (_, i) => {
+                                        let pageNum = currentPage <= 3 ? i + 1 : currentPage + i - 2;
+                                        if (pageNum > jobsPagination.last_page) pageNum = jobsPagination.last_page - (4 - i);
+                                        if (pageNum < 1) pageNum = i + 1;
+                                        if (pageNum > jobsPagination.last_page) return null;
+
+                                        return (
+                                            <button
+                                                key={pageNum}
+                                                onClick={() => fetchData(pageNum)}
+                                                className={`w-10 h-10 rounded-xl text-[11px] font-black transition-all shadow-sm border ${currentPage === pageNum
+                                                    ? 'bg-[#FDF22F] text-black border-[#FDF22F]'
+                                                    : 'bg-white text-gray-400 border-gray-200 hover:border-[#FDF22F] hover:text-[#000000]'
+                                                    }`}
+                                            >
+                                                {pageNum}
+                                            </button>
+                                        );
+                                    })}
+
+                                    <button
+                                        onClick={() => fetchData(currentPage + 1)}
+                                        disabled={currentPage === jobsPagination.last_page}
+                                        className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-[#000000] hover:border-[#000000] transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             ) : null}
 
@@ -803,332 +1154,788 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                         </div>
                     </div>
 
-                    <table className="w-full text-left">
-                        <thead className="bg-[#F9FAFB] border-b border-gray-100">
-                            <tr>
-                                {(initialTab === 'Employees' && (subTab === 'STAFF' || subTab === 'SEPARATED'))
-                                    ? ['CANDIDATE', 'ROLE', 'DEPARTMENT', 'STATUS', subTab === 'SEPARATED' ? 'SEPARATION DATE' : 'JOINED DATE', 'ACTIONS'].map(h => (
-                                        <th key={h} className="px-8 py-4 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
-                                    ))
-                                    : ['CANDIDATE', 'APPLIED FOR', 'DEPARTMENT', 'EXPERIENCE', 'MATCHING', 'STATUS', 'APPLIED ON', (initialTab === 'Employees' ? 'ACTIONS' : null)].filter(Boolean).map(h => (
-                                        <th key={h} className="px-8 py-4 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
-                                    ))}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {(initialTab === 'Employees' && (subTab === 'STAFF' || subTab === 'SEPARATED')) ? (
-                                employees === null ? null : employees.length === 0 ? (
-                                    <tr><td colSpan={7} className="px-8 py-20 text-center text-gray-400 italic text-sm">No internal users found in this category.</td></tr>
-                                ) : (
-                                    employees.map((emp: any) => (
-                                        <tr key={emp.id} className="hover:bg-gray-50 transition-colors group">
-                                            <td className="px-8 py-6">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center font-black text-[#000000]">
-                                                        {emp.name.split(' ').map((n: string) => n[0]).join('')}
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-black text-[14px] text-[#000000]">{emp.name}</p>
-                                                        <p className="text-[10px] font-bold text-gray-400 lowercase tracking-widest">{emp.email}</p>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-6 text-[13px] text-gray-600 font-medium lowercase">
-                                                {emp.roles?.map((r: any) => r.name).join(', ') || 'Staff'}
-                                            </td>
-                                            <td className="px-8 py-6 text-[13px] text-gray-600 font-medium">
-                                                {emp.department || '-'}
-                                            </td>
-                                            <td className="px-8 py-4">
-                                                <span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest ${emp.employment_status === 'active' ? 'bg-[#FDF22F] text-[#000000] shadow-lg shadow-[#FDF22F]/30 ring-1 ring-[#FDF22F]/50' : 'bg-red-50 text-red-600'
-                                                    }`}>
-                                                    {emp.employment_status === 'active' ? '🏆 ' : ''}{emp.employment_status}
-                                                </span>
-                                            </td>
-                                            <td className="px-8 py-6 text-[13px] text-gray-600">
-                                                {subTab === 'SEPARATED'
-                                                    ? (emp.separation_date ? new Date(emp.separation_date).toLocaleDateString() : 'N/A')
-                                                    : (emp.joined_date ? new Date(emp.joined_date).toLocaleDateString() : '-')}
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <button
-                                                    onClick={() => {
-                                                        setSelectedEmployee(emp);
-                                                        setEmployeeStatusForm({
-                                                            status: emp.employment_status,
-                                                            reason: emp.separation_reason || '',
-                                                            date: emp.separation_date || new Date().toISOString().split('T')[0]
-                                                        });
-                                                        setEmployeeStatusModal(true);
-                                                    }}
-                                                    className="text-[10px] font-black text-[#000000] uppercase tracking-widest hover:underline"
-                                                >
-                                                    Manage
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )
-                            ) : (
-                                applicants === null ? null : applicants.length === 0 ? (
-                                    <tr><td colSpan={7} className="px-8 py-20 text-center text-gray-400 italic text-sm">No {subTab.toLowerCase()} talent currently in the pipeline for {user.tenant?.name || 'this company'}.</td></tr>
-                                ) : (
-                                    applicants.map((app: any) => (
-                                        <tr
-                                            key={app.id}
-                                            className="hover:bg-gray-50 transition-colors group cursor-pointer"
-                                            onClick={() => setDrawerApp(app)}
+                    {/* Professional Filter Bar for Candidates */}
+                    {initialTab === 'Candidates' && (
+                        <div className="px-10 py-5 bg-gray-50/30 border-b border-gray-100 flex items-center gap-6 overflow-x-auto">
+                            <div className="flex items-center justify-between w-full">
+                                <div className="flex items-center gap-6">
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Filters</span>
+                                    </div>
+
+                                    <div className="flex items-center gap-3">
+                                        <div>
+                                            <select
+                                                value={applicantFilters.experience}
+                                                onChange={(e) => setApplicantFilters(p => ({ ...p, experience: e.target.value }))}
+                                                className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all"
+                                            >
+                                                <option value="All">All Experience</option>
+                                                <option value="0-1">Under 1 Year</option>
+                                                <option value="1-3">1 - 3 Years</option>
+                                                <option value="3-5">3 - 5 Years</option>
+                                                <option value="5-10">5 - 10 Years</option>
+                                                <option value="10+">10+ Years</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <select
+                                                value={applicantFilters.department}
+                                                onChange={(e) => setApplicantFilters(p => ({ ...p, department: e.target.value }))}
+                                                className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all"
+                                            >
+                                                <option value="All">All Departments</option>
+                                                {Array.from(new Set((jobs || []).map(j => j.department).filter(Boolean))).map(dept => (
+                                                    <option key={dept} value={dept}>{dept}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <select
+                                                value={applicantFilters.gender}
+                                                onChange={(e) => setApplicantFilters(p => ({ ...p, gender: e.target.value }))}
+                                                className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all"
+                                            >
+                                                <option value="All">All Genders</option>
+                                                <option value="Male">Male</option>
+                                                <option value="Female">Female</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <input
+                                                type="number"
+                                                placeholder="Min % Score"
+                                                value={applicantFilters.minScore}
+                                                onChange={(e) => setApplicantFilters(p => ({ ...p, minScore: e.target.value }))}
+                                                className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all w-28"
+                                            />
+                                        </div>
+
+                                        <button
+                                            onClick={() => setApplicantFilters({ experience: 'All', department: 'All', gender: 'All', minScore: '' })}
+                                            className="text-[10px] font-black text-gray-400 hover:text-black uppercase tracking-widest ml-2"
                                         >
-                                            <td className="px-8 py-6">
+                                            Reset
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-1 bg-white border border-gray-100 p-1 rounded-xl shadow-sm">
+                                    <button
+                                        onClick={() => setCandidateViewMode('table')}
+                                        className={`p-2 rounded-lg transition-all ${candidateViewMode === 'table' ? 'bg-[#FDF22F] text-black' : 'text-gray-400 hover:text-black'}`}
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                                    </button>
+                                    <button
+                                        onClick={() => setCandidateViewMode('grid')}
+                                        className={`p-2 rounded-lg transition-all ${candidateViewMode === 'grid' ? 'bg-[#FDF22F] text-black' : 'text-gray-400 hover:text-black'}`}
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Professional Filter Bar for Employees (Hired/Staff) */}
+                    {initialTab === 'Employees' && (
+                        <div className="px-10 py-5 bg-gray-50/30 border-b border-gray-100 flex items-center gap-6 overflow-x-auto">
+                            <div className="flex items-center justify-between w-full">
+                                <div className="flex items-center gap-6">
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Filters</span>
+                                    </div>
+
+                                    <div className="flex items-center gap-3">
+                                        {/* Name Search for Employees */}
+                                        <div className="relative">
+                                            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                            <input
+                                                type="text"
+                                                placeholder="Search employees..."
+                                                value={employeeFilters.search}
+                                                onChange={(e) => setEmployeeFilters(p => ({ ...p, search: e.target.value }))}
+                                                className="bg-white border border-gray-100 rounded-xl pl-9 pr-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all w-48 placeholder:text-gray-400"
+                                            />
+                                        </div>
+
+                                        {/* Applied For (Job) Filter */}
+                                        {subTab === 'HIRED' && (
+                                            <div>
+                                                <select
+                                                    value={employeeFilters.jobId}
+                                                    onChange={(e) => setEmployeeFilters(p => ({ ...p, jobId: e.target.value }))}
+                                                    className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all cursor-pointer min-w-[150px]"
+                                                >
+                                                    <option value="All">{loading && !jobs ? 'Loading Jobs...' : 'Applied For (All)'}</option>
+                                                    {(jobs || []).map(j => (
+                                                        <option key={j.id} value={j.id}>{j.title}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+
+                                        {/* Department Filter */}
+                                        <div>
+                                            <select
+                                                value={employeeFilters.department}
+                                                onChange={(e) => setEmployeeFilters(p => ({ ...p, department: e.target.value }))}
+                                                className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all cursor-pointer min-w-[140px]"
+                                            >
+                                                <option value="All">{loading && !jobs ? 'Loading Depts...' : 'All Departments'}</option>
+                                                {Array.from(new Set([
+                                                    ...(jobs || []).map(j => j.department),
+                                                    ...(employees || []).map(e => e.department)
+                                                ].filter(Boolean))).map(dept => (
+                                                    <option key={dept} value={dept}>{dept}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Experience Filter */}
+                                        {subTab === 'HIRED' && (
+                                            <div>
+                                                <select
+                                                    value={employeeFilters.experience}
+                                                    onChange={(e) => setEmployeeFilters(p => ({ ...p, experience: e.target.value }))}
+                                                    className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all cursor-pointer"
+                                                >
+                                                    <option value="All">All Experience</option>
+                                                    <option value="0-1">Under 1 Year</option>
+                                                    <option value="1-3">1 - 3 Years</option>
+                                                    <option value="3-5">3 - 5 Years</option>
+                                                    <option value="5-10">5 - 10 Years</option>
+                                                    <option value="10+">10+ Years</option>
+                                                </select>
+                                            </div>
+                                        )}
+
+                                        {/* Hired On Filter */}
+                                        {subTab === 'HIRED' && (
+                                            <select
+                                                value={employeeFilters.hiredOn}
+                                                onChange={(e) => setEmployeeFilters(p => ({ ...p, hiredOn: e.target.value }))}
+                                                className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all cursor-pointer"
+                                            >
+                                                <option value="All">Hired (All Time)</option>
+                                                <option value="7">Last 7 Days</option>
+                                                <option value="30">Last 30 Days</option>
+                                                <option value="90">Last 90 Days</option>
+                                                <option value="365">This Year</option>
+                                            </select>
+                                        )}
+
+                                        {/* Applied On Filter */}
+                                        {subTab === 'HIRED' && (
+                                            <select
+                                                value={employeeFilters.appliedOn}
+                                                onChange={(e) => setEmployeeFilters(p => ({ ...p, appliedOn: e.target.value }))}
+                                                className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all cursor-pointer"
+                                            >
+                                                <option value="All">Applied (All Time)</option>
+                                                <option value="7">Last 7 Days</option>
+                                                <option value="30">Last 30 Days</option>
+                                                <option value="90">Last 90 Days</option>
+                                            </select>
+                                        )}
+
+                                        <button
+                                            onClick={() => setEmployeeFilters({ experience: 'All', department: 'All', search: '', jobId: 'All', hiredOn: 'All', appliedOn: 'All' })}
+                                            className="text-[10px] font-black text-gray-400 hover:text-black uppercase tracking-widest ml-2 transition-colors flex items-center gap-1.5"
+                                        >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                            Reset
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {candidateViewMode === 'grid' && initialTab === 'Candidates' ? (
+                        <div className="p-10 bg-gray-50/20">
+                            {applicants === null ? null : applicants.length === 0 ? (
+                                <div className="py-20 text-center text-gray-400 italic text-sm bg-white rounded-3xl border border-dashed border-gray-200">
+                                    No {subTab.toLowerCase()} talent currently in the pipeline.
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                                    {applicants.map((app: any) => (
+                                        <div
+                                            key={app.id}
+                                            onClick={() => setDrawerApp(app)}
+                                            className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-2xl hover:border-[#FDF22F] transition-all duration-500 cursor-pointer group relative overflow-hidden flex flex-col h-full"
+                                        >
+                                            <div className="absolute top-0 right-0 w-32 h-32 bg-[#FDF22F]/5 rounded-bl-[100px] -mr-16 -mt-16 transition-transform group-hover:scale-110" />
+
+                                            <div className="flex items-start justify-between relative mb-6">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="relative group/avatar">
-                                                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden border border-gray-100 group-hover:border-[#FDF22F] transition-all duration-300 shadow-sm">
+                                                    <div className="relative">
+                                                        <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center overflow-hidden border-2 border-white shadow-md group-hover:rotate-3 transition-transform duration-500">
                                                             {app.photo_path ? (
                                                                 <img
                                                                     src={app.photo_path.startsWith('http') ? app.photo_path : `${API_URL.replace('/api', '/storage')}/${app.photo_path}`}
                                                                     alt=""
-                                                                    className="w-full h-full object-cover transition-transform duration-500 group-hover/avatar:scale-110"
+                                                                    className="w-full h-full object-cover"
                                                                     onError={(e) => {
                                                                         (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(app.name)}&background=FDF22F&color=000&bold=true`;
                                                                     }}
                                                                 />
                                                             ) : (
-                                                                <span className="text-sm font-black text-[#000000]">{app.name.split(' ').map((n: string) => n[0]).join('')}</span>
+                                                                <span className="text-xl font-black text-black">{app.name[0]}</span>
                                                             )}
                                                         </div>
-                                                        <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white bg-[#FDF22F] shadow-sm" />
+                                                        <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white bg-[#FDF22F] shadow-sm flex items-center justify-center">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
+                                                        </div>
                                                     </div>
-                                                    <div className="space-y-0.5">
-                                                        <p className="font-black text-[14px] text-[#000000] tracking-tight group-hover:text-[#000000] transition-colors">{app.name}</p>
-                                                        <div className="flex items-center gap-2">
+                                                    <div className="space-y-1">
+                                                        <h3 className="font-black text-[16px] text-black tracking-tight leading-tight group-hover:text-[#FDF22F] transition-colors">{app.name}</h3>
+                                                        <div className="flex flex-col gap-0.5">
                                                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{app.email}</span>
-                                                            <span className="w-1 h-1 rounded-full bg-gray-200" />
-                                                            <span className="text-[10px] font-bold text-[#000000] uppercase tracking-widest">{app.phone || 'No Phone'}</span>
+                                                            <p className="text-[11px] font-black text-black/40 uppercase tracking-tighter">
+                                                                {app.job_posting?.title || 'Unknown Role'}
+                                                            </p>
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <p className="text-[13px] font-bold text-[#000000]">{app.job_posting?.title || 'Open Role'}</p>
-                                                <p className="text-[10px] font-medium text-gray-400 uppercase tracking-widest mt-0.5">Reference: REQ{app.job_posting?.job_requisition_id || '---'}</p>
-                                            </td>
-                                            <td className="px-8 py-6 text-[13px] text-gray-600 font-medium">
-                                                {app.job_posting?.department || app.job_posting?.requisition?.department || '-'}
-                                            </td>
-                                            <td className="px-8 py-6 text-[13px] text-gray-600">
-                                                {app.years_of_experience || '0'} Years
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                                        <div
-                                                            className="h-full bg-[#FDF22F] rounded-full"
-                                                            style={{ width: `${app.match_score || 85}%` }}
-                                                        />
-                                                    </div>
-                                                    <span className="text-[11px] font-black text-[#000000]">{app.match_score || 85}%</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                {app.status === 'interview' && app.interviews && app.interviews.length > 0 ? (
-                                                    <span className="px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest bg-purple-50 text-purple-600">
-                                                        Scheduled: {(() => {
-                                                            const d = new Date(app.interviews[0].scheduled_at);
-                                                            return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
-                                                        })()}
-                                                    </span>
-                                                ) : (
-                                                    <span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest ${app.status === 'hired' ? 'bg-[#FDF22F] text-[#000000] shadow-lg shadow-[#FDF22F]/30 ring-1 ring-[#FDF22F]/50' :
+                                                <div className="flex flex-col items-end gap-2">
+                                                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm shadow-black/5 ${app.status === 'hired' ? 'bg-[#FDF22F] text-black ring-1 ring-black/5' :
                                                         app.status === 'rejected' ? 'bg-red-50 text-red-600' :
-                                                            app.status === 'interview' ? 'bg-purple-50 text-purple-600' :
-                                                                app.status === 'offer' ? 'bg-amber-50 text-amber-600' :
-                                                                    app.status === 'new' ? 'bg-[#FDF22F] text-[#000000] shadow-lg shadow-[#FDF22F]/30 ring-1 ring-[#FDF22F]/50' :
-                                                                    'bg-blue-50 text-blue-600'
+                                                            'bg-gray-100 text-gray-500'
                                                         }`}>
-                                                        {app.status === 'hired' ? '🏆 ' : ''}{app.status}
+                                                        {app.status}
                                                     </span>
-                                                )}
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                {app.created_at ? (() => {
-                                                    const d = new Date(app.created_at);
-                                                    const now = new Date();
-                                                    const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-                                                    const relative = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Yesterday' : `${diffDays}d ago`;
-                                                    return (
-                                                        <div>
-                                                            <p className="text-[12px] font-bold text-[#000000]">
-                                                                {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                                            </p>
-                                                            <p className="text-[11px] text-gray-400 mt-0.5">
-                                                                {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} · <span className="text-[#000000] font-black">{relative}</span>
-                                                            </p>
-                                                        </div>
-                                                    );
-                                                })() : <span className="text-gray-300 text-xs">—</span>}
-                                            </td>
-                                            {
-                                                initialTab === 'Employees' && (
-                                                    <td className="px-8 py-6">
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setDrawerApp(app);
-                                                            }}
-                                                            className="text-[10px] font-black text-[#000000] uppercase tracking-widest hover:underline"
-                                                        >
-                                                            Manage
-                                                        </button>
-                                                    </td>
-                                                )
-                                            }
-                                        </tr >
-                                    ))
-                                )
-                            )
-                            }
-                        </tbody >
-                    </table >
+                                                    <div className="bg-gray-50 px-2 py-1 rounded-lg border border-gray-100">
+                                                        <span className="text-[10px] font-black text-black">{app.match_score || 85}% Match</span>
+                                                    </div>
+                                                </div>
+                                            </div>
 
-                    {/* Pagination Controls */}
-                    {/* Pagination Controls */}
-                    {
-                        ((initialTab === 'Employees' && (subTab === 'STAFF' || subTab === 'SEPARATED')) ? employeesPagination : applicantsPagination) && ((initialTab === 'Employees' && (subTab === 'STAFF' || subTab === 'SEPARATED')) ? employeesPagination : applicantsPagination).last_page > 1 && (
-                            <div className="px-8 py-4 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
-                                        Showing <span className="text-[#000000]">{((initialTab === 'Employees' && (subTab === 'STAFF' || subTab === 'SEPARATED')) ? employeesPagination : applicantsPagination).from}</span> - <span className="text-[#000000]">{((initialTab === 'Employees' && (subTab === 'STAFF' || subTab === 'SEPARATED')) ? employeesPagination : applicantsPagination).to}</span> of <span className="text-[#000000]">{((initialTab === 'Employees' && (subTab === 'STAFF' || subTab === 'SEPARATED')) ? employeesPagination : applicantsPagination).total}</span>
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => fetchData(currentPage - 1)}
-                                        disabled={currentPage === 1}
-                                        className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-[#000000] hover:border-[#000000] transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
-                                    </button>
+                                            <div className="grid grid-cols-2 gap-4 mb-6 relative">
+                                                <div className="space-y-1 bg-gray-50/50 p-3 rounded-2xl border border-gray-100/50">
+                                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Experience</p>
+                                                    <p className="text-[13px] font-black text-black">{app.years_of_experience || '0'} Years</p>
+                                                </div>
+                                                <div className="space-y-1 bg-gray-50/50 p-3 rounded-2xl border border-gray-100/50">
+                                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Applied</p>
+                                                    <p className="text-[13px] font-black text-black">
+                                                        {app.created_at ? new Date(app.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
+                                                    </p>
+                                                </div>
+                                            </div>
 
-                                    {[...Array(((initialTab === 'Employees' && subTab !== 'HIRED') ? employeesPagination : applicantsPagination).last_page)].map((_, i) => (
-                                        <button
-                                            key={i + 1}
-                                            onClick={() => fetchData(i + 1)}
-                                            className={`w-10 h-10 rounded-xl text-[11px] font-black transition-all shadow-sm border ${currentPage === i + 1
-                                                ? 'bg-[#FDF22F] text-black border-[#FDF22F]'
-                                                : 'bg-white text-gray-400 border-gray-200 hover:border-[#FDF22F] hover:text-[#000000]'
-                                                }`}
-                                        >
-                                            {i + 1}
-                                        </button>
+                                            <div className="mt-auto pt-4 border-t border-gray-50 flex items-center justify-end">
+                                                <button className="text-[10px] font-black text-black uppercase tracking-widest hover:text-[#FDF22F] transition-colors flex items-center gap-1 group/btn">
+                                                    Review Profile
+                                                    <svg className="w-3 h-3 group-hover/btn:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" /></svg>
+                                                </button>
+                                            </div>
+                                        </div>
                                     ))}
-
-                                    <button
-                                        onClick={() => fetchData(currentPage + 1)}
-                                        disabled={currentPage === ((initialTab === 'Employees' && subTab !== 'HIRED') ? employeesPagination : applicantsPagination).last_page}
-                                        className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-[#000000] hover:border-[#000000] transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
-                                    </button>
                                 </div>
+                            )}
+                        </div>
+                    ) : (
+                        <table className="w-full text-left">
+                            <thead className="bg-[#F9FAFB] border-b border-gray-100">
+                                <tr>
+                                    {(initialTab === 'Employees' && (subTab === 'STAFF' || subTab === 'SEPARATED'))
+                                        ? ['CANDIDATE', 'ROLE', 'DEPARTMENT', 'STATUS', subTab === 'SEPARATED' ? 'SEPARATION DATE' : 'JOINED DATE', 'ACTIONS'].map(h => (
+                                            <th key={h} className="px-8 py-4 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
+                                        ))
+                                        : ['CANDIDATE', 'APPLIED FOR', 'DEPARTMENT', 'EXPERIENCE', 'MATCHING', 'STATUS', (subTab === 'HIRED' ? 'HIRED ON' : null), 'APPLIED ON', (initialTab === 'Employees' ? 'ACTIONS' : null)].filter(Boolean).map(h => (
+                                            <th key={h} className="px-8 py-4 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
+                                        ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {(initialTab === 'Employees' && (subTab === 'STAFF' || subTab === 'SEPARATED')) ? (
+                                    employees === null ? null : employees.length === 0 ? (
+                                        <tr><td colSpan={7} className="px-8 py-20 text-center text-gray-400 italic text-sm">No internal users found in this category.</td></tr>
+                                    ) : (
+                                        employees.map((emp: any) => (
+                                            <tr key={emp.id} className="hover:bg-gray-50 transition-colors group">
+                                                <td className="px-8 py-6">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center font-black text-[#000000]">
+                                                            {emp.name.split(' ').map((n: string) => n[0]).join('')}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-black text-[14px] text-[#000000]">{emp.name}</p>
+                                                            <p className="text-[10px] font-bold text-gray-400 lowercase tracking-widest">{emp.email}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-6 text-[13px] text-gray-600 font-medium lowercase">
+                                                    {emp.roles?.map((r: any) => r.name).join(', ') || 'Staff'}
+                                                </td>
+                                                <td className="px-8 py-6 text-[13px] text-gray-600 font-medium">
+                                                    {emp.department || '-'}
+                                                </td>
+                                                <td className="px-8 py-4">
+                                                    <span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest ${emp.employment_status === 'active' ? 'bg-[#FDF22F] text-[#000000] shadow-lg shadow-[#FDF22F]/30 ring-1 ring-[#FDF22F]/50' : 'bg-red-50 text-red-600'
+                                                        }`}>
+                                                        {emp.employment_status === 'active' ? '🏆 ' : ''}{emp.employment_status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-8 py-6 text-[13px] text-gray-600">
+                                                    {subTab === 'SEPARATED'
+                                                        ? (emp.separation_date ? new Date(emp.separation_date).toLocaleDateString() : 'N/A')
+                                                        : (emp.joined_date ? new Date(emp.joined_date).toLocaleDateString() : '-')}
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedEmployee(emp);
+                                                            setEmployeeStatusForm({
+                                                                status: emp.employment_status,
+                                                                reason: emp.separation_reason || '',
+                                                                date: emp.separation_date || new Date().toISOString().split('T')[0]
+                                                            });
+                                                            setEmployeeStatusModal(true);
+                                                        }}
+                                                        className="text-[10px] font-black text-[#000000] uppercase tracking-widest hover:underline"
+                                                    >
+                                                        Manage
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )
+                                ) : (
+                                    applicants === null ? null : applicants.length === 0 ? (
+                                        <tr><td colSpan={7} className="px-8 py-20 text-center text-gray-400 italic text-sm">No {subTab.toLowerCase()} talent currently in the pipeline for {user.tenant?.name || 'this company'}.</td></tr>
+                                    ) : (
+                                        applicants.map((app: any) => (
+                                            <tr
+                                                key={app.id}
+                                                className="hover:bg-gray-50 transition-colors group cursor-pointer"
+                                                onClick={() => setDrawerApp(app)}
+                                            >
+                                                <td className="px-8 py-6">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="relative group/avatar">
+                                                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden border border-gray-100 group-hover:border-[#FDF22F] transition-all duration-300 shadow-sm">
+                                                                {app.photo_path ? (
+                                                                    <img
+                                                                        src={app.photo_path.startsWith('http') ? app.photo_path : `${API_URL.replace('/api', '/storage')}/${app.photo_path}`}
+                                                                        alt=""
+                                                                        className="w-full h-full object-cover transition-transform duration-500 group-hover/avatar:scale-110"
+                                                                        onError={(e) => {
+                                                                            (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(app.name)}&background=FDF22F&color=000&bold=true`;
+                                                                        }}
+                                                                    />
+                                                                ) : (
+                                                                    <span className="text-sm font-black text-[#000000]">{app.name.split(' ').map((n: string) => n[0]).join('')}</span>
+                                                                )}
+                                                            </div>
+                                                            <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white bg-[#FDF22F] shadow-sm" />
+                                                        </div>
+                                                        <div className="space-y-0.5">
+                                                            <p className="font-black text-[14px] text-[#000000] tracking-tight group-hover:text-[#000000] transition-colors">{app.name}</p>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{app.email}</span>
+                                                                <span className="w-1 h-1 rounded-full bg-gray-200" />
+                                                                <span className="text-[10px] font-bold text-[#000000] uppercase tracking-widest">{app.phone || 'No Phone'}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    <p className="text-[13px] font-bold text-[#000000]">{app.job_posting?.title || 'Open Role'}</p>
+                                                    <p className="text-[10px] font-medium text-gray-400 uppercase tracking-widest mt-0.5">Reference: REQ{app.job_posting?.job_requisition_id || '---'}</p>
+                                                </td>
+                                                <td className="px-8 py-6 text-[13px] text-gray-600 font-medium">
+                                                    {app.job_posting?.department || app.job_posting?.requisition?.department || '-'}
+                                                </td>
+                                                <td className="px-8 py-6 text-[13px] text-gray-600">
+                                                    {app.years_of_experience || '0'} Years
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                                            <div
+                                                                className="h-full bg-[#FDF22F] rounded-full"
+                                                                style={{ width: `${app.match_score || 85}%` }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-[11px] font-black text-[#000000]">{app.match_score || 85}%</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    {app.status === 'interview' && app.interviews && app.interviews.length > 0 ? (
+                                                        <span className="px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest bg-purple-50 text-purple-600">
+                                                            Scheduled: {(() => {
+                                                                const d = new Date(app.interviews[0].scheduled_at);
+                                                                return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+                                                            })()}
+                                                        </span>
+                                                    ) : (
+                                                        <span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest ${app.status === 'hired' ? 'bg-[#FDF22F] text-[#000000] shadow-lg shadow-[#FDF22F]/30 ring-1 ring-[#FDF22F]/50' :
+                                                            app.status === 'rejected' ? 'bg-red-50 text-red-600' :
+                                                                app.status === 'interview' ? 'bg-purple-50 text-purple-600' :
+                                                                    app.status === 'offer' ? 'bg-amber-50 text-amber-600' :
+                                                                        app.status === 'new' ? 'bg-[#FDF22F] text-[#000000] shadow-lg shadow-[#FDF22F]/30 ring-1 ring-[#FDF22F]/50' :
+                                                                            'bg-blue-50 text-blue-600'
+                                                            }`}>
+                                                            {app.status === 'hired' ? '🏆 ' : ''}{app.status}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    {subTab === 'HIRED' && (
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <p className="text-[12px] font-black text-black">
+                                                                {app.hired_at ? new Date(app.hired_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                                                            </p>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-[#FDF22F] animate-pulse" />
+                                                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Officially Hired</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    {app.created_at ? (() => {
+                                                        const d = new Date(app.created_at);
+                                                        const now = new Date();
+                                                        const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+                                                        const relative = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Yesterday' : `${diffDays}d ago`;
+                                                        return (
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <p className="text-[12px] font-black text-black">
+                                                                    {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                                </p>
+                                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                                                    {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} · <span className="text-black">{relative}</span>
+                                                                </p>
+                                                            </div>
+                                                        );
+                                                    })() : <span className="text-gray-300 text-[10px] font-black uppercase tracking-widest">—</span>}
+                                                </td>
+                                                {
+                                                    initialTab === 'Employees' && (
+                                                        <td className="px-8 py-6">
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setDrawerApp(app);
+                                                                }}
+                                                                className="text-[10px] font-black text-[#000000] uppercase tracking-widest hover:underline"
+                                                            >
+                                                                Manage
+                                                            </button>
+                                                        </td>
+                                                    )
+                                                }
+                                            </tr >
+                                        ))
+                                    )
+                                )
+                                }
+                            </tbody >
+                        </table>
+                    )}
+
+                    {(() => {
+                        const pagination = (initialTab === 'Employees' && (subTab === 'STAFF' || subTab === 'SEPARATED')) ? employeesPagination : applicantsPagination;
+                        if (!pagination) return null;
+
+                        return (
+                            <div className="px-10 py-6 bg-white border-t border-gray-100 flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">
+                                            SHOWING <span className="text-black font-black">{pagination.from || 0}</span> TO <span className="text-black font-black">{pagination.to || 0}</span> OF <span className="text-black font-black">{pagination.total}</span>
+                                        </p>
+                                    </div>
+                                    <div className="h-4 w-[1px] bg-gray-200 mx-2" />
+                                    <div className="relative group">
+                                        <select
+                                            value={itemsPerPage}
+                                            onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                                            className="appearance-none bg-gray-50/50 text-[10px] font-black text-gray-500 hover:text-black uppercase tracking-widest pl-4 pr-10 py-2.5 rounded-xl border border-gray-100 outline-none focus:border-[#FDF22F] hover:border-[#FDF22F] transition-all cursor-pointer shadow-sm"
+                                        >
+                                            <option value={10}>10 / page</option>
+                                            <option value={15}>15 / page</option>
+                                            <option value={25}>25 / page</option>
+                                            <option value={50}>50 / page</option>
+                                        </select>
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-black transition-colors">
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7" /></svg>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {pagination.last_page > 1 && (
+                                    <div className="flex items-center gap-1.5">
+                                        <button
+                                            onClick={() => fetchData(currentPage - 1)}
+                                            disabled={currentPage === 1}
+                                            className="w-10 h-10 rounded-xl bg-white border border-gray-100 flex items-center justify-center text-gray-300 hover:text-black transition-all disabled:opacity-30 disabled:cursor-not-allowed group"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7" /></svg>
+                                        </button>
+
+                                        {(() => {
+                                            const pages = [];
+                                            const lastPage = pagination.last_page;
+
+                                            if (lastPage <= 7) {
+                                                for (let i = 1; i <= lastPage; i++) pages.push(i);
+                                            } else {
+                                                pages.push(1);
+                                                if (currentPage > 4) pages.push('...');
+                                                const start = Math.max(2, currentPage - 2);
+                                                const end = Math.min(lastPage - 1, currentPage + 2);
+                                                for (let i = start; i <= end; i++) pages.push(i);
+                                                if (currentPage < lastPage - 3) pages.push('...');
+                                                pages.push(lastPage);
+                                            }
+
+                                            return pages.map((p, i) => (
+                                                <button
+                                                    key={i}
+                                                    disabled={p === '...'}
+                                                    onClick={() => p !== '...' && fetchData(p as number)}
+                                                    className={`w-9 h-9 rounded-xl text-[11px] font-black transition-all ${currentPage === p
+                                                        ? 'bg-[#FDF22F] text-black shadow-lg shadow-[#FDF22F]/20 active:scale-95'
+                                                        : p === '...' ? 'bg-transparent text-gray-300 border-none cursor-default' : 'bg-transparent text-gray-400 hover:text-black hover:bg-gray-50'
+                                                        }`}
+                                                >
+                                                    {p}
+                                                </button>
+                                            ));
+                                        })()}
+
+                                        <button
+                                            onClick={() => fetchData(currentPage + 1)}
+                                            disabled={currentPage === pagination.last_page}
+                                            className="w-10 h-10 rounded-xl bg-white border border-gray-100 flex items-center justify-center text-gray-300 hover:text-black transition-all disabled:opacity-30 disabled:cursor-not-allowed group"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" /></svg>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
-                        )}
+                        );
+                    })()}
                 </div>
             )
             }
 
             {
                 initialTab === 'HiringPlan' && (
-                    <table className="w-full text-left">
-                        <thead className="bg-[#F9FAFB] border-b border-gray-100">
-                            <tr>
-                                {['REQUISITION', 'HIRING MANAGER', 'LOCATION', 'SALARY', 'SUBMITTED ON', 'POSTED TO PORTAL', 'STATUS'].map(h => (
-                                    <th key={h} className="px-8 py-4 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {requisitions === null ? null : requisitions.length === 0 ? (
-                                <tr><td colSpan={7} className="px-8 py-20 text-center text-gray-400 italic text-sm">No hiring plan items yet for {user.tenant?.name || 'this company'}.</td></tr>
-                            ) : requisitions.map((req: any) => (
-                                <tr
-                                    key={req.id}
-                                    className="hover:bg-gray-50 transition-colors group cursor-pointer"
-                                    onClick={() => setDrawerReq(req)}
-                                >
-                                    <td className="px-8 py-6">
-                                        <p className="font-black text-[13px] text-black group-hover:text-[#FDF22F] transition-colors">
-                                            REQ{req.id} {req.title}
-                                        </p>
-                                        <p className="text-[11px] text-gray-400 mt-0.5 tracking-tight">
-                                            {req.department} · {req.tenant?.name || user.tenant?.name || 'Droga Pharma'}
-                                        </p>
-                                    </td>
-                                    <td className="px-8 py-6 text-[13px] text-gray-600">
-                                        {req.requester?.name || 'Hiring Manager'}
-                                    </td>
-                                    <td className="px-8 py-6 text-[13px] text-gray-600">
-                                        {req.location}
-                                    </td>
-                                    <td className="px-8 py-6 text-[13px] text-[#000000] font-black">
-                                        {req.budget ? req.budget.toLocaleString() : '15,000'} ETB /mo
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        {req.created_at ? (() => {
-                                            const d = new Date(req.created_at);
-                                            return (
-                                                <div>
-                                                    <p className="text-[12px] font-bold text-[#000000]">
-                                                        {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                                    </p>
-                                                    <p className="text-[11px] text-gray-400 mt-0.5">
-                                                        {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                                                    </p>
-                                                </div>
-                                            );
-                                        })() : <span className="text-gray-300">—</span>}
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        {req.job_posting?.created_at ? (() => {
-                                            const d = new Date(req.job_posting.published_at || req.job_posting.created_at);
-                                            const deadline = req.job_posting.deadline ? new Date(req.job_posting.deadline) : null;
-                                            return (
-                                                <div className="space-y-1">
+                    <div className="flex flex-col">
+                        {/* Professional Filter Bar for Hiring Plan */}
+                        <div className="px-10 py-5 bg-gray-50/30 border-b border-gray-100 flex items-center gap-6 overflow-x-auto">
+                            <div className="flex items-center justify-between w-full">
+                                <div className="flex items-center gap-6">
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Filters</span>
+                                    </div>
+
+                                    <div className="flex items-center gap-3">
+                                        {/* Search Box */}
+                                        <div className="relative">
+                                            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                            <input
+                                                type="text"
+                                                placeholder="Search requisitions..."
+                                                value={hiringPlanFilters.search}
+                                                onChange={(e) => setHiringPlanFilters(p => ({ ...p, search: e.target.value }))}
+                                                className="bg-white border border-gray-100 rounded-xl pl-9 pr-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all w-48 placeholder:text-gray-400 shadow-sm"
+                                            />
+                                        </div>
+
+                                        {/* Location Filter */}
+                                        <select
+                                            value={hiringPlanFilters.location || 'All'}
+                                            onChange={(e) => setHiringPlanFilters(p => ({ ...p, location: e.target.value }))}
+                                            className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all cursor-pointer min-w-[130px] shadow-sm"
+                                        >
+                                            <option value="All">All Locations</option>
+                                            {Array.from(new Set((requisitions || []).map(r => r.location).filter(Boolean))).map(loc => (
+                                                <option key={loc} value={loc}>{loc}</option>
+                                            ))}
+                                        </select>
+
+                                        {/* Salary Filter */}
+                                        <select
+                                            value={hiringPlanFilters.salaryRange}
+                                            onChange={(e) => setHiringPlanFilters(p => ({ ...p, salaryRange: e.target.value }))}
+                                            className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all cursor-pointer min-w-[130px] shadow-sm"
+                                        >
+                                            <option value="All">All Salaries</option>
+                                            <option value="0-15000">Under 15k ETB</option>
+                                            <option value="15000-30000">15k - 30k ETB</option>
+                                            <option value="30000-60000">30k - 60k ETB</option>
+                                            <option value="60000-100000">60k - 100k ETB</option>
+                                            <option value="100000+">100k+ ETB</option>
+                                        </select>
+
+                                        {/* Submitted On Filter */}
+                                        <select
+                                            value={hiringPlanFilters.submittedOn}
+                                            onChange={(e) => setHiringPlanFilters(p => ({ ...p, submittedOn: e.target.value }))}
+                                            className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all cursor-pointer min-w-[130px] shadow-sm"
+                                        >
+                                            <option value="All">Any Submission</option>
+                                            <option value="7">Last 7 Days</option>
+                                            <option value="30">Last 30 Days</option>
+                                            <option value="90">Last 90 Days</option>
+                                        </select>
+
+                                        {/* Portal Filter */}
+                                        <select
+                                            value={hiringPlanFilters.portal}
+                                            onChange={(e) => setHiringPlanFilters(p => ({ ...p, portal: e.target.value }))}
+                                            className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all cursor-pointer min-w-[130px] shadow-sm"
+                                        >
+                                            <option value="All">All Portal Status</option>
+                                            <option value="Posted">Posted to Portal</option>
+                                            <option value="Not Posted">Internal Only</option>
+                                        </select>
+
+                                        {/* Status Filter */}
+                                        <select
+                                            value={hiringPlanFilters.status}
+                                            onChange={(e) => setHiringPlanFilters(p => ({ ...p, status: e.target.value }))}
+                                            className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:border-[#FDF22F] transition-all cursor-pointer min-w-[130px] shadow-sm"
+                                        >
+                                            <option value="All">All Statuses</option>
+                                            <option value="pending_md">Pending MD</option>
+                                            <option value="pending_hr">Pending HR</option>
+                                            <option value="approved">Approved</option>
+                                            <option value="rejected">Rejected</option>
+                                        </select>
+
+                                        <button
+                                            onClick={() => setHiringPlanFilters({ location: 'All', department: 'All', salaryRange: 'All', submittedOn: 'All', portal: 'All', status: 'All', search: '' })}
+                                            className="text-[10px] font-black text-gray-400 hover:text-black uppercase tracking-widest ml-2 transition-colors flex items-center gap-1.5"
+                                        >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                            Reset
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* KPI Mini-Summary */}
+                                {hiringPlanKpis && (
+                                    <div className="flex items-center gap-4 border-l border-gray-100 pl-6 ml-6">
+                                        <div className="text-right">
+                                            <p className="text-[14px] font-black text-black leading-none">{hiringPlanKpis.open_requests || 0}</p>
+                                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Open Reqs</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[14px] font-black text-emerald-500 leading-none">{hiringPlanKpis.team_growth || 0}</p>
+                                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">New Hires</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <table className="w-full text-left">
+                            <thead className="bg-[#F9FAFB] border-b border-gray-100">
+                                <tr>
+                                    {['REQUISITION', 'HIRING MANAGER', 'LOCATION', 'SALARY', 'SUBMITTED ON', 'POSTED TO PORTAL', 'STATUS'].map(h => (
+                                        <th key={h} className="px-8 py-4 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {requisitions === null ? null : requisitions.length === 0 ? (
+                                    <tr><td colSpan={7} className="px-8 py-20 text-center text-gray-400 italic text-sm">No hiring plan items yet for {user.tenant?.name || 'this company'}.</td></tr>
+                                ) : requisitions.map((req: any) => (
+                                    <tr
+                                        key={req.id}
+                                        className="hover:bg-gray-50 transition-colors group cursor-pointer"
+                                        onClick={() => setDrawerReq(req)}
+                                    >
+                                        <td className="px-8 py-6">
+                                            <p className="font-black text-[13px] text-black group-hover:text-[#FDF22F] transition-colors">
+                                                REQ{req.id} {req.title}
+                                            </p>
+                                            <p className="text-[11px] text-gray-400 mt-0.5 tracking-tight">
+                                                {req.department} · {req.tenant?.name || user.tenant?.name || 'Droga Pharma'}
+                                            </p>
+                                        </td>
+                                        <td className="px-8 py-6 text-[13px] text-gray-600">
+                                            {req.requester?.name || 'Hiring Manager'}
+                                        </td>
+                                        <td className="px-8 py-6 text-[13px] text-gray-600">
+                                            {req.location}
+                                        </td>
+                                        <td className="px-8 py-6 text-[13px] text-[#000000] font-black">
+                                            {req.budget ? req.budget.toLocaleString() : '15,000'} ETB /mo
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            {req.created_at ? (() => {
+                                                const d = new Date(req.created_at);
+                                                return (
                                                     <div>
                                                         <p className="text-[12px] font-bold text-[#000000]">
                                                             {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                                         </p>
-                                                        <p className="text-[11px] text-emerald-600 font-bold">
+                                                        <p className="text-[11px] text-gray-400 mt-0.5">
                                                             {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                                         </p>
                                                     </div>
-                                                    {deadline && (
-                                                        <div className="pt-1 border-t border-gray-100">
-                                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Deadline</p>
-                                                            <p className="text-[10px] font-black text-amber-600">
-                                                                {deadline.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                );
+                                            })() : <span className="text-gray-300">—</span>}
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            {req.job_posting?.created_at ? (() => {
+                                                const d = new Date(req.job_posting.published_at || req.job_posting.created_at);
+                                                const deadline = req.job_posting.deadline ? new Date(req.job_posting.deadline) : null;
+                                                return (
+                                                    <div className="space-y-1">
+                                                        <div>
+                                                            <p className="text-[12px] font-bold text-[#000000]">
+                                                                {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                            </p>
+                                                            <p className="text-[11px] text-emerald-600 font-bold">
+                                                                {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                                             </p>
                                                         </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })() : (
-                                            <span className="px-2 py-1 bg-[#FDF22F]/10 text-black text-[10px] font-black uppercase tracking-widest rounded">
-                                                Not Posted
+                                                        {deadline && (
+                                                            <div className="pt-1 border-t border-gray-100">
+                                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Deadline</p>
+                                                                <p className="text-[10px] font-black text-amber-600">
+                                                                    {deadline.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })() : (
+                                                <span className="px-2 py-1 bg-[#FDF22F]/10 text-black text-[10px] font-black uppercase tracking-widest rounded">
+                                                    Not Posted
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            <span className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${req.status === 'approved' ? 'bg-[#FDF22F] text-black shadow-lg shadow-[#FDF22F]/10' :
+                                                req.status === 'pending' ? 'bg-amber-50 text-amber-600' :
+                                                    'bg-red-50 text-red-500'
+                                                }`}>
+                                                {req.status}
                                             </span>
-                                        )}
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        <span className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${req.status === 'approved' ? 'bg-[#FDF22F] text-black shadow-lg shadow-[#FDF22F]/10' :
-                                            req.status === 'pending' ? 'bg-amber-50 text-amber-600' :
-                                                'bg-red-50 text-red-500'
-                                            }`}>
-                                            {req.status}
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )
             }
 
@@ -1979,8 +2786,8 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
 
                                 <section className="space-y-4">
                                     <div className="flex justify-between items-center">
-                                        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Description & Justification</h3>
-                                        {drawerReq.jd_path && (
+                                        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Full Job Description (JD)</h3>
+                                        {drawerReq.jd_path && !drawerReq.jd_content && (
                                             <a
                                                 href={`${API_URL}/v1/requisitions/${drawerReq.id}/jd?token=${typeof window !== 'undefined' ? localStorage.getItem('auth_token') : ''}`}
                                                 target="_blank"
@@ -1988,12 +2795,28 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                                                 className="flex items-center gap-2 text-[10px] font-black text-black hover:bg-black hover:text-white uppercase tracking-widest bg-[#FDF22F] px-4 py-2 rounded-xl transition-all shadow-lg shadow-[#FDF22F]/10"
                                             >
                                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                                View JD Document
+                                                View Legacy JD Doc
                                             </a>
                                         )}
                                     </div>
-                                    <div className="text-sm text-gray-600 leading-relaxed bg-white p-6 rounded border border-gray-100 italic">
-                                        "{drawerReq.description || 'No detailed description provided.'}"
+                                    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-inner max-h-[400px] overflow-y-auto">
+                                        {drawerReq.jd_content ? (
+                                            <div
+                                                className="text-sm font-medium text-gray-700 leading-relaxed prose prose-sm max-w-none"
+                                                dangerouslySetInnerHTML={{ __html: drawerReq.jd_content }}
+                                            />
+                                        ) : (
+                                            <div className="text-sm text-gray-400 italic">
+                                                No text-based JD content provided.
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-4 pt-6 border-t border-gray-50">
+                                        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Description & Justification</h3>
+                                        <div className="text-sm text-gray-600 leading-relaxed bg-white p-6 rounded border border-gray-100 italic">
+                                            "{drawerReq.description || 'No detailed description provided.'}"
+                                        </div>
                                     </div>
                                 </section>
 
@@ -2292,6 +3115,32 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                                             <p className="relative z-10 pl-6 text-[15px] font-medium opacity-80">{drawerApp.professional_background || "No professional summary provided."}</p>
                                         </div>
                                     </section>
+                                    {/* Scoring & Assessment Results */}
+                                    {(drawerApp.written_exam_score || drawerApp.technical_interview_score) && (
+                                        <section className="space-y-4">
+                                            <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-[#FDF22F]" />
+                                                Scoring & Assessment
+                                            </h3>
+                                            <div className="grid grid-cols-2 gap-6">
+                                                <div className="p-6 bg-[#FDF22F]/5 border border-[#FDF22F]/20 rounded-3xl">
+                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Written Exam</p>
+                                                    <p className="text-3xl font-black text-black">{drawerApp.written_exam_score ? `${drawerApp.written_exam_score}%` : 'N/A'}</p>
+                                                </div>
+                                                <div className="p-6 bg-[#FDF22F]/5 border border-[#FDF22F]/20 rounded-3xl">
+                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Technical Interview</p>
+                                                    <p className="text-3xl font-black text-black">{drawerApp.technical_interview_score ? `${drawerApp.technical_interview_score}%` : 'N/A'}</p>
+                                                </div>
+                                            </div>
+                                            {drawerApp.interviewer_feedback && (
+                                                <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100">
+                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Interviewer Feedback</p>
+                                                    <p className="text-sm font-medium text-gray-600 italic leading-relaxed">&quot;{drawerApp.interviewer_feedback}&quot;</p>
+                                                </div>
+                                            )}
+                                        </section>
+                                    )}
+
 
                                     {/* Supporting Documents */}
                                     <section className="space-y-4">
@@ -2310,14 +3159,34 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                                                         <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">PDF Document</p>
                                                     </div>
                                                 </div>
-                                                <a
-                                                    href={`${API_URL}/v1/applicants/${drawerApp.id}/resume`}
-                                                    target="_blank"
-                                                    className="px-8 py-3 bg-white border-2 border-gray-100 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#000000] hover:text-white hover:border-[#000000] transition-all shadow-sm"
+                                                <button
+                                                    onClick={() => setPreviewUrl(`${API_URL}/v1/applicants/${drawerApp.id}/resume`)}
+                                                    className="px-8 py-3 bg-[#FDF22F] text-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#000000] hover:text-white transition-all shadow-sm"
                                                 >
                                                     Open Document
-                                                </a>
+                                                </button>
                                             </div>
+
+                                            {drawerApp.exam_paper_path && (
+                                                <div className="p-6 bg-white rounded-3xl border border-gray-100 flex items-center justify-between group hover:border-[#FDF22F]/20 hover:bg-[#FDF22F]/5 transition-all shadow-sm">
+                                                    <div className="flex items-center gap-5">
+                                                        <div className="w-14 h-14 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-all shadow-inner">
+                                                            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-black text-[#000000] uppercase tracking-tighter">Candidate Exam Paper</p>
+                                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Proof of Assessment</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => window.open(`${API_URL.replace('/api', '/storage')}/${drawerApp.exam_paper_path}`, '_blank')}
+                                                        className="px-8 py-3 bg-black text-[#FDF22F] rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#FDF22F] hover:text-black transition-all shadow-sm"
+                                                    >
+                                                        Open Paper
+                                                    </button>
+                                                </div>
+                                            )}
+
 
                                             {drawerApp.attachments?.map((file: any, i: number) => (
                                                 <div key={i} className="p-6 bg-white rounded-3xl border border-gray-100 flex items-center justify-between group hover:border-[#F7F8FA] hover:bg-[#F7F8FA] transition-all shadow-sm">
@@ -2330,13 +3199,12 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                                                             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{file.file_type?.toUpperCase() || 'FILE'}</p>
                                                         </div>
                                                     </div>
-                                                    <a
-                                                        href={`${API_URL}/v1/attachments/${file.id}/view`}
-                                                        target="_blank"
+                                                    <button
+                                                        onClick={() => setPreviewUrl(`${API_URL}/v1/attachments/${file.id}/view`)}
                                                         className="px-8 py-3 bg-white border-2 border-gray-100 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#000000] hover:text-white hover:border-[#000000] transition-all shadow-sm"
                                                     >
                                                         Open File
-                                                    </a>
+                                                    </button>
                                                 </div>
                                             ))}
                                         </div>
@@ -2407,31 +3275,98 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                             <div className="p-8 border-t border-gray-100 bg-[#F9FAFB]/80 backdrop-blur-xl flex gap-5">
                                 {drawerApp.status !== 'hired' && drawerApp.status !== 'rejected' && (
                                     <>
-                                        {/* NEW / APPLIED → Move to Interview (Now opens Schedule Modal) */}
-                                        {(drawerApp.status === 'applied' || drawerApp.status === 'new' || drawerApp.status === 'phone_screen') && (
+                                        {/* NEW → Move to Written Exam */}
+                                        {drawerApp.status === 'new' && (
                                             <button
-                                                onClick={() => {
-                                                    // Auto-select first department user as default interviewer
-                                                    if (departmentUsers.length > 0) {
-                                                        setScheduleForm(p => ({ ...p, interviewer_id: departmentUsers[0].id }));
-                                                    }
-                                                    setScheduleModal(true);
-                                                }}
+                                                onClick={() => handleStatusUpdate(drawerApp.id, 'written_exam')}
                                                 disabled={actionLoading}
                                                 className="flex-1 py-5 bg-[#FDF22F] text-black rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-[#FDF22F]/20 hover:bg-black hover:text-white hover:-translate-y-0.5 transition-all"
                                             >
-                                                {actionLoading ? <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin mx-auto" /> : '📅 Schedule Interview'}
+                                                {actionLoading ? <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin mx-auto" /> : '✍️ Move to Written Exam'}
                                             </button>
                                         )}
 
-                                        {/* INTERVIEW → Send Offer Letter (opens modal) */}
-                                        {drawerApp.status === 'interview' && (
+                                        {/* WRITTEN EXAM → Tech Interview */}
+                                        {drawerApp.status === 'written_exam' && (
+                                            <button
+                                                onClick={() => {
+                                                    setScoringForm({
+                                                        written_exam_score: drawerApp.written_exam_score || '',
+                                                        technical_interview_score: drawerApp.technical_interview_score || '',
+                                                        interviewer_feedback: drawerApp.interviewer_feedback || '',
+                                                        exam_paper: null
+                                                    });
+                                                    setScoringModal(true);
+                                                }}
+                                                disabled={actionLoading}
+                                                className="flex-1 py-5 bg-black text-white rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] hover:bg-[#FDF22F] hover:text-black transition-all"
+                                            >
+                                                ✍️ Fill Exam Score
+                                            </button>
+                                        )}
+                                        {drawerApp.status === 'written_exam' && drawerApp.written_exam_score && (
+                                            <button
+                                                onClick={() => handleStatusUpdate(drawerApp.id, 'technical_interview')}
+                                                disabled={actionLoading}
+                                                className="flex-1 py-5 bg-[#FDF22F] text-black rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-[#FDF22F]/20 hover:bg-black hover:text-white hover:-translate-y-0.5 transition-all"
+                                            >
+                                                ⚙️ Move to Tech Interview
+                                            </button>
+                                        )}
+
+                                        {/* TECHNICAL INTERVIEW → Final Interview */}
+                                        {drawerApp.status === 'technical_interview' && (
+                                            <button
+                                                onClick={() => {
+                                                    setScoringForm({
+                                                        written_exam_score: drawerApp.written_exam_score || '',
+                                                        technical_interview_score: drawerApp.technical_interview_score || '',
+                                                        interviewer_feedback: drawerApp.interviewer_feedback || '',
+                                                        exam_paper: null
+                                                    });
+                                                    setScoringModal(true);
+                                                }}
+                                                disabled={actionLoading}
+                                                className="flex-1 py-5 bg-black text-white rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] hover:bg-[#FDF22F] hover:text-black transition-all"
+                                            >
+                                                ⚙️ Fill Tech Results
+                                            </button>
+                                        )}
+                                        {drawerApp.status === 'technical_interview' && drawerApp.technical_interview_score && (
+                                            <button
+                                                onClick={() => handleStatusUpdate(drawerApp.id, 'final_interview')}
+                                                disabled={actionLoading}
+                                                className="flex-1 py-5 bg-[#FDF22F] text-black rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-[#FDF22F]/20 hover:bg-black hover:text-white hover:-translate-y-0.5 transition-all"
+                                            >
+                                                🗣️ Move to Final Interview
+                                            </button>
+                                        )}
+
+                                        {/* FINAL INTERVIEW → Offer */}
+                                        {drawerApp.status === 'final_interview' && (
+                                            <button
+                                                onClick={() => {
+                                                    setScoringForm({
+                                                        written_exam_score: drawerApp.written_exam_score || '',
+                                                        technical_interview_score: drawerApp.technical_interview_score || '',
+                                                        interviewer_feedback: drawerApp.interviewer_feedback || '',
+                                                        exam_paper: null
+                                                    });
+                                                    setScoringModal(true);
+                                                }}
+                                                disabled={actionLoading}
+                                                className="flex-1 py-5 bg-black text-white rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] hover:bg-[#FDF22F] hover:text-black transition-all"
+                                            >
+                                                📊 Final Scoring
+                                            </button>
+                                        )}
+                                        {drawerApp.status === 'final_interview' && drawerApp.technical_interview_score && (
                                             <button
                                                 onClick={() => setOfferModal(true)}
                                                 disabled={actionLoading}
                                                 className="flex-1 py-5 bg-[#FDF22F] text-black rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-[#FDF22F]/20 hover:bg-black hover:text-white hover:-translate-y-0.5 transition-all"
                                             >
-                                                ✉️ Send Offer Letter
+                                                ✉️ Send Offer
                                             </button>
                                         )}
 
@@ -2680,14 +3615,14 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                 )}
             </AnimatePresence>
 
-            {/* Employee Status Modal */}
+            {/* Scoring & Results Modal */}
             <AnimatePresence>
-                {employeeStatusModal && selectedEmployee && (
+                {scoringModal && drawerApp && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-[#000000]/80 backdrop-blur-sm"
+                        className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-[#000000]/80 backdrop-blur-sm"
                     >
                         <motion.div
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -2695,76 +3630,322 @@ export default function TADashboard({ user, activeTab: initialTab, onLogout }: {
                             exit={{ scale: 0.95, opacity: 0, y: 20 }}
                             className="bg-white w-full max-w-xl rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
                         >
-                            <div className="px-8 pt-8 pb-6 bg-[#F9FAFB] border-b border-gray-100 flex justify-between items-center shrink-0">
-                                <div className="space-y-1">
-                                    <h2 className="text-xl font-black text-[#000000] tracking-tight">MANAGE STATUS</h2>
-                                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Update employment for {selectedEmployee.name}</p>
+                            <div className="px-10 pt-10 pb-8 bg-[#FDF22F] flex justify-between items-center shrink-0 relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-64 h-64 bg-black/5 rounded-full -mr-20 -mt-20 blur-3xl" />
+                                <div className="relative z-10 space-y-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="px-2 py-0.5 bg-black text-[#FDF22F] text-[9px] font-black uppercase tracking-tighter rounded">Assessment</div>
+                                    </div>
+                                    <h2 className="text-2xl font-black text-black tracking-tight leading-none">CANDIDATE SCORING</h2>
+                                    <p className="text-[11px] font-black text-black/50 uppercase tracking-widest leading-relaxed">Results for <strong>{drawerApp.name}</strong></p>
                                 </div>
-                                <button onClick={() => setEmployeeStatusModal(false)} className="w-10 h-10 rounded-full bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-red-400 transition-colors">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                                <button onClick={() => setScoringModal(false)} className="relative z-10 w-12 h-12 rounded-2xl bg-black text-[#FDF22F] flex items-center justify-center hover:scale-110 transition-all shadow-xl shadow-black/20">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
                                 </button>
                             </div>
 
-                            <div className="p-8 space-y-6 overflow-y-auto">
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">New Status</label>
-                                        <select
-                                            value={employeeStatusForm.status}
-                                            onChange={e => setEmployeeStatusForm({ ...employeeStatusForm, status: e.target.value })}
-                                            className="w-full px-4 py-3.5 rounded-2xl border-2 border-gray-100 focus:border-[#000000] focus:outline-none text-[#000000] font-bold text-sm transition-colors"
-                                        >
-                                            <option value="active">Active</option>
-                                            <option value="resigned">Resigned</option>
-                                            <option value="terminated">Terminated</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Date of Separation</label>
+                            <div className="p-10 space-y-8 overflow-y-auto bg-white">
+                                <div className="grid grid-cols-2 gap-8">
+                                    <div className={`space-y-2 p-7 rounded-[32px] transition-all duration-500 ${drawerApp.status === 'written_exam' ? 'bg-[#FDF22F]/10 border-2 border-[#FDF22F] shadow-lg shadow-[#FDF22F]/5' : 'bg-gray-50 border-2 border-transparent'}`}>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Written Exam (%)</label>
+                                            {drawerApp.status === 'written_exam' && <span className="text-[9px] font-black text-[#FDF22F] bg-black px-2.5 py-1 rounded-lg uppercase tracking-widest shadow-lg shadow-black/20">Current Stage</span>}
+                                        </div>
                                         <input
-                                            type="date"
-                                            value={employeeStatusForm.date}
-                                            onChange={e => setEmployeeStatusForm({ ...employeeStatusForm, date: e.target.value })}
-                                            className="w-full px-4 py-3.5 rounded-2xl border-2 border-gray-100 focus:border-[#000000] focus:outline-none text-[#000000] font-bold text-sm transition-colors"
-                                            disabled={employeeStatusForm.status === 'active'}
+                                            type="number"
+                                            placeholder="00"
+                                            max="100"
+                                            value={scoringForm.written_exam_score}
+                                            onChange={e => setScoringForm(p => ({ ...p, written_exam_score: e.target.value }))}
+                                            className="w-full bg-transparent border-none focus:ring-0 text-black font-black text-4xl placeholder-black/5 p-0"
+                                        />
+                                    </div>
+                                    <div className={`space-y-2 p-7 rounded-[32px] transition-all duration-500 ${drawerApp.status === 'technical_interview' ? 'bg-[#FDF22F]/10 border-2 border-[#FDF22F] shadow-lg shadow-[#FDF22F]/5' : 'bg-gray-50 border-2 border-transparent'}`}>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Tech Interview (%)</label>
+                                            {drawerApp.status === 'technical_interview' && <span className="text-[9px] font-black text-[#FDF22F] bg-black px-2.5 py-1 rounded-lg uppercase tracking-widest shadow-lg shadow-black/20">Current Stage</span>}
+                                        </div>
+                                        <input
+                                            type="number"
+                                            placeholder="00"
+                                            max="100"
+                                            value={scoringForm.technical_interview_score}
+                                            onChange={e => setScoringForm(p => ({ ...p, technical_interview_score: e.target.value }))}
+                                            className="w-full bg-transparent border-none focus:ring-0 text-black font-black text-4xl placeholder-black/5 p-0"
                                         />
                                     </div>
                                 </div>
 
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Reason (Internal Note)</label>
+                                <div className="space-y-3">
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Interviewer Feedback & Assessment Notes</label>
                                     <textarea
                                         rows={4}
-                                        value={employeeStatusForm.reason}
-                                        onChange={e => setEmployeeStatusForm({ ...employeeStatusForm, reason: e.target.value })}
-                                        placeholder="Briefly describe the reason for separation..."
-                                        className="w-full px-4 py-3.5 rounded-2xl border-2 border-gray-100 focus:border-[#000000] focus:outline-none text-[#000000] font-bold text-sm transition-colors resize-none"
-                                        disabled={employeeStatusForm.status === 'active'}
+                                        placeholder="Enter detailed technical assessment..."
+                                        value={scoringForm.interviewer_feedback}
+                                        onChange={e => setScoringForm(p => ({ ...p, interviewer_feedback: e.target.value }))}
+                                        className="w-full px-7 py-6 rounded-[32px] border-2 border-gray-100 focus:border-black focus:outline-none text-black font-bold text-sm transition-all resize-none bg-gray-50/50 hover:bg-white focus:bg-white"
                                     />
                                 </div>
 
-                                {employeeStatusForm.status !== 'active' && (
-                                    <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 text-[12px] text-amber-600 font-medium flex gap-3">
-                                        <span className="text-base text-xl leading-none">⚠️</span>
-                                        <p>Warning: Marking an employee as {employeeStatusForm.status} will remove them from the active list and it will immediately affect the <strong>Employee Turnover Report</strong>.</p>
+                                <div className="space-y-4">
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Secure Document Attachment</label>
+                                    <div className="relative group">
+                                        <input
+                                            type="file"
+                                            onChange={e => setScoringForm(p => ({ ...p, exam_paper: e.target.files?.[0] || null }))}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                        />
+                                        <div className={`p-8 rounded-[32px] border-2 border-dashed transition-all duration-300 flex items-center justify-between ${scoringForm.exam_paper ? 'border-emerald-400 bg-emerald-50/20' : 'border-gray-100 group-hover:border-[#FDF22F] bg-gray-50/30'}`}>
+                                            <div className="flex items-center gap-5">
+                                                <div className={`w-14 h-14 rounded-[20px] flex items-center justify-center transition-all ${scoringForm.exam_paper ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-white text-gray-300 shadow-sm border border-gray-50'}`}>
+                                                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className={`text-[13px] font-black uppercase tracking-wider ${scoringForm.exam_paper ? 'text-emerald-700' : 'text-black/60'}`}>
+                                                        {scoringForm.exam_paper ? 'Digital Proof Attached' : 'Attach Exam Paper'}
+                                                    </p>
+                                                    <p className="text-[11px] font-medium text-black/30 mt-0.5">
+                                                        {scoringForm.exam_paper ? scoringForm.exam_paper.name : 'Physical documents / scanned files'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {!scoringForm.exam_paper && (
+                                                <div className="px-5 py-2.5 bg-black text-[#FDF22F] rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-black/10 group-hover:-translate-y-0.5 transition-all">Browse File</div>
+                                            )}
+                                        </div>
                                     </div>
-                                )}
+                                </div>
+
                             </div>
 
-                            <div className="px-8 pb-8 shrink-0 flex gap-4 pt-4 bg-white border-t border-gray-50">
+                            <div className="px-10 pb-10 pt-2 shrink-0 flex gap-5 bg-white border-t border-gray-50/50">
                                 <button
-                                    onClick={() => setEmployeeStatusModal(false)}
-                                    className="flex-1 py-4 bg-gray-100 text-gray-500 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-gray-200 transition-all"
+                                    onClick={() => handleUpdateScores()}
+                                    disabled={actionLoading}
+                                    className="flex-1 py-5 bg-black text-white rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] hover:bg-gray-800 transition-all shadow-xl shadow-black/10 disabled:opacity-70"
+                                >
+                                    💾 Save Only
+                                </button>
+
+                                {drawerApp.status === 'written_exam' && (
+                                    <button
+                                        onClick={() => {
+                                            if (!scoringForm.written_exam_score) {
+                                                showToast('Please enter a Written Exam score first', 'error');
+                                                return;
+                                            }
+                                            handleUpdateScores('technical_interview');
+                                        }}
+                                        disabled={actionLoading}
+                                        className="flex-[2] py-5 bg-[#FDF22F] text-black rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl shadow-[#FDF22F]/40 hover:scale-[1.02] hover:bg-black hover:text-white transition-all disabled:opacity-70"
+                                    >
+                                        Save & Move to Tech Interview
+                                    </button>
+                                )}
+
+                                {drawerApp.status === 'technical_interview' && (
+                                    <button
+                                        onClick={() => {
+                                            if (!scoringForm.technical_interview_score) {
+                                                showToast('Please enter a Technical Interview score first', 'error');
+                                                return;
+                                            }
+                                            handleUpdateScores('final_interview');
+                                        }}
+                                        disabled={actionLoading}
+                                        className="flex-[2] py-5 bg-[#FDF22F] text-black rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl shadow-[#FDF22F]/40 hover:scale-[1.02] hover:bg-black hover:text-white transition-all disabled:opacity-70"
+                                    >
+                                        Save & Move to Final Interview
+                                    </button>
+                                )}
+
+                                {drawerApp.status === 'final_interview' && (
+                                    <button
+                                        onClick={() => setOfferModal(true)}
+                                        className="flex-[2] py-5 bg-black text-[#FDF22F] rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl shadow-black/20 hover:scale-[1.02] hover:bg-[#FDF22F] hover:text-black transition-all"
+                                    >
+                                        ✉️ Proceed to Offer Stage
+                                    </button>
+                                )}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Employee Status Modal */}
+            <AnimatePresence>
+                {
+                    employeeStatusModal && selectedEmployee && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-[#000000]/80 backdrop-blur-sm"
+                        >
+                            <motion.div
+                                initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                                animate={{ scale: 1, opacity: 1, y: 0 }}
+                                exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                                className="bg-white w-full max-w-xl rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+                            >
+                                <div className="px-8 pt-8 pb-6 bg-[#F9FAFB] border-b border-gray-100 flex justify-between items-center shrink-0">
+                                    <div className="space-y-1">
+                                        <h2 className="text-xl font-black text-[#000000] tracking-tight">MANAGE STATUS</h2>
+                                        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Update employment for {selectedEmployee.name}</p>
+                                    </div>
+                                    <button onClick={() => setEmployeeStatusModal(false)} className="w-10 h-10 rounded-full bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-red-400 transition-colors">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                </div>
+
+                                <div className="p-8 space-y-6 overflow-y-auto">
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">New Status</label>
+                                            <select
+                                                value={employeeStatusForm.status}
+                                                onChange={e => setEmployeeStatusForm({ ...employeeStatusForm, status: e.target.value })}
+                                                className="w-full px-4 py-3.5 rounded-2xl border-2 border-gray-100 focus:border-[#000000] focus:outline-none text-[#000000] font-bold text-sm transition-colors"
+                                            >
+                                                <option value="active">Active</option>
+                                                <option value="resigned">Resigned</option>
+                                                <option value="terminated">Terminated</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Date of Separation</label>
+                                            <input
+                                                type="date"
+                                                value={employeeStatusForm.date}
+                                                onChange={e => setEmployeeStatusForm({ ...employeeStatusForm, date: e.target.value })}
+                                                className="w-full px-4 py-3.5 rounded-2xl border-2 border-gray-100 focus:border-[#000000] focus:outline-none text-[#000000] font-bold text-sm transition-colors"
+                                                disabled={employeeStatusForm.status === 'active'}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Reason (Internal Note)</label>
+                                        <textarea
+                                            rows={4}
+                                            value={employeeStatusForm.reason}
+                                            onChange={e => setEmployeeStatusForm({ ...employeeStatusForm, reason: e.target.value })}
+                                            placeholder="Briefly describe the reason for separation..."
+                                            className="w-full px-4 py-3.5 rounded-2xl border-2 border-gray-100 focus:border-[#000000] focus:outline-none text-[#000000] font-bold text-sm transition-colors resize-none"
+                                            disabled={employeeStatusForm.status === 'active'}
+                                        />
+                                    </div>
+
+                                    {employeeStatusForm.status !== 'active' && (
+                                        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 text-[12px] text-amber-600 font-medium flex gap-3">
+                                            <span className="text-base text-xl leading-none">⚠️</span>
+                                            <p>Warning: Marking an employee as {employeeStatusForm.status} will remove them from the active list and it will immediately affect the <strong>Employee Turnover Report</strong>.</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="px-8 pb-8 shrink-0 flex gap-4 pt-4 bg-white border-t border-gray-50">
+                                    <button
+                                        onClick={() => setEmployeeStatusModal(false)}
+                                        className="flex-1 py-4 bg-gray-100 text-gray-500 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-gray-200 transition-all"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleUpdateEmployeeStatus}
+                                        disabled={actionLoading}
+                                        className="flex-[2] py-4 bg-gradient-to-r from-[#000000] to-[#222222] text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-[#000000]/30 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {actionLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" /> : 'Confirm Status Update'}
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )
+                }
+            </AnimatePresence >
+            <AnimatePresence>
+                {deleteConfirmId && (
+                    <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setDeleteConfirmId(null)}
+                            className="fixed inset-0 bg-[#000000]/60 backdrop-blur-md"
+                        />
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                            className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden relative z-[310] p-10 text-center"
+                        >
+                            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner ring-4 ring-red-50/50">
+                                <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </div>
+                            <h3 className="text-xl font-black text-[#000000] tracking-tight mb-2">Delete Job Posting?</h3>
+                            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest leading-relaxed mb-8">
+                                This action is permanent and cannot be undone. All data related to this posting will be removed.
+                            </p>
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => setDeleteConfirmId(null)}
+                                    className="flex-1 py-4 bg-gray-50 text-gray-500 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-gray-100 transition-all"
                                 >
                                     Cancel
                                 </button>
                                 <button
-                                    onClick={handleUpdateEmployeeStatus}
+                                    onClick={() => handleDeleteJob(deleteConfirmId)}
                                     disabled={actionLoading}
-                                    className="flex-[2] py-4 bg-gradient-to-r from-[#000000] to-[#222222] text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-[#000000]/30 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex-1 py-4 bg-red-500 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-red-500/30 hover:bg-red-600 hover:-translate-y-0.5 transition-all disabled:opacity-50"
                                 >
-                                    {actionLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" /> : 'Confirm Status Update'}
+                                    {actionLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" /> : 'Delete Now'}
                                 </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {toast && <Toast msg={toast.msg} type={toast.type} />}
+            </AnimatePresence>
+
+            {/* Inline Document Preview Modal */}
+            <AnimatePresence>
+                {previewUrl && (
+                    <motion.div
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[400] flex items-center justify-center p-6 bg-[#000000]/80 backdrop-blur-md"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-white w-full max-w-5xl h-[90vh] rounded-[32px] overflow-hidden shadow-2xl flex flex-col"
+                        >
+                            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-[#FDF22F] flex items-center justify-center text-black">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-black text-[#000000] uppercase tracking-tight">Document Preview</h3>
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Powered by TA Team Vision</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <a href={previewUrl} download className="px-6 py-2.5 bg-white border border-gray-200 text-[#000000] rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all flex items-center gap-2 shadow-sm">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                        Download
+                                    </a>
+                                    <button onClick={() => setPreviewUrl(null)} className="w-10 h-10 rounded-xl bg-black text-white flex items-center justify-center hover:bg-red-500 transition-colors shadow-lg shadow-black/20">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="flex-1 bg-gray-200/20">
+                                <iframe src={previewUrl} className="w-full h-full border-none" title="Resume Preview" />
                             </div>
                         </motion.div>
                     </motion.div>

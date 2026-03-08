@@ -107,6 +107,11 @@ class InterviewController extends Controller
      */
     public function indexGlobal(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if (!$user->role_slug === 'admin' && !$user->hasRole('admin')) {
+            return response()->json(['error' => 'Unauthorized global view.'], 403);
+        }
+
         $query = Interview::with(['applicant.jobPosting', 'interviewer', 'tenant']);
 
         if ($request->has('tenant_id') && $request->tenant_id) {
