@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Applicant;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -146,11 +147,18 @@ class EmployeeController extends Controller
                 })
                 ->count();
 
-            // Separations that happened within this month
-            $separations = User::where('tenant_id', $tenantId)
+            // Separations that happened within this month (users + hired applicants)
+            $userSeparations = User::where('tenant_id', $tenantId)
                 ->whereIn('employment_status', ['resigned', 'terminated'])
                 ->whereBetween('separation_date', [$monthStart, $monthEnd])
                 ->count();
+
+            $applicantSeparations = Applicant::where('tenant_id', $tenantId)
+                ->whereIn('employment_status', ['resigned', 'terminated'])
+                ->whereBetween('separation_date', [$monthStart, $monthEnd])
+                ->count();
+
+            $separations = $userSeparations + $applicantSeparations;
 
             $avgHeadcount = ($headcountStart + $headcountEnd) / 2;
             $rate = $avgHeadcount > 0

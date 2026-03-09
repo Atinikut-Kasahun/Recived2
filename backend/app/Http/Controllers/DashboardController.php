@@ -170,9 +170,10 @@ class DashboardController extends Controller
                     ->limit(5)
                     ->get(),
                 'funnel' => [
-                    'applied' => \App\Models\Applicant::where('tenant_id', $tenantId)->count(),
-                    'interview' => \App\Models\Applicant::where('tenant_id', $tenantId)->where('status', 'interview')->count(),
-                    'offer' => \App\Models\Applicant::where('tenant_id', $tenantId)->where('status', 'offer')->count(),
+                    'applied' => \App\Models\Applicant::where('tenant_id', $tenantId)->whereIn('status', ['applied', 'new'])->count(),
+                    'screening' => \App\Models\Applicant::where('tenant_id', $tenantId)->whereIn('status', ['phone_screen', 'written_exam'])->count(),
+                    'interviewing' => \App\Models\Applicant::where('tenant_id', $tenantId)->whereIn('status', ['interview', 'technical_interview', 'final_interview'])->count(),
+                    'offered' => \App\Models\Applicant::where('tenant_id', $tenantId)->where('status', 'offer')->count(),
                     'hired' => \App\Models\Applicant::where('tenant_id', $tenantId)->where('status', 'hired')->count(),
                     'rejected' => \App\Models\Applicant::where('tenant_id', $tenantId)->where('status', 'rejected')->count(),
                 ],

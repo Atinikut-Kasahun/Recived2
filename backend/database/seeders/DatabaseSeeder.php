@@ -63,6 +63,8 @@ class DatabaseSeeder extends Seeder
                     'name' => strtoupper($config['email_prefix']) . " - $name",
                     'password' => bcrypt('password'),
                     'tenant_id' => $tenant->id,
+                    'department' => $config['email_prefix'] === 'ta' ? 'Human Resources' : 'Operations',
+                    'joined_date' => now()->subMonths(rand(1, 24))->toDateString(),
                 ]);
 
                 $user->roles()->syncWithoutDetaching([Role::where('slug', $config['role'])->first()->id]);

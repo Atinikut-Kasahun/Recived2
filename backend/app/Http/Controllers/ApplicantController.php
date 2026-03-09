@@ -222,6 +222,44 @@ class ApplicantController extends Controller
         return response()->json(['message' => 'Notification sent to applicant successfully']);
     }
 
+    /**
+     * Update employment status for a hired applicant (active / resigned / terminated).
+     * This feeds into the Employee Turnover graph in Reports.
+     */
+    public function updateEmploymentStatus(Request $request, $id): JsonResponse
+    {
+        $admin = $request->user();
+
+        $validated = $request->validate([
+            'employment_status' => 'required|in:active,resigned,terminated',
+            'separation_date'   => 'nullable|date',
+            'separation_reason' => 'nullable|string|max:500',
+        ]);
+
+        $applicant = Applicant::where('id', $id)
+            ->where('tenant_id', $admin->tenant_id)
+            ->firstOrFail();
+
+        // Auto-fill separation_date to today if separating
+        if (in_array($validated['employment_status'], ['resigned', 'terminated'])) {
+            $validated['separation_date'] = $validated['separation_date'] ?? now()->toDateString();
+        } else {
+            // Re-activating clears separation info
+            $validated['separation_date']   = null;
+            $validated['separation_reason'] = null;
+        }
+
+        $applicant->update($validated);
+
+        // Bust dashboard cache so turnover chart reflects immediately
+        \Illuminate\Support\Facades\Cache::forget("ta_manager_dashboard_stats_{$admin->tenant_id}");
+
+        return response()->json([
+            'message'   => 'Employment status updated successfully',
+            'applicant' => $applicant,
+        ]);
+    }
+
     public function stats(Request $request): JsonResponse
     {
         $user = $request->user();

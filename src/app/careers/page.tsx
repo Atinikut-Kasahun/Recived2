@@ -243,160 +243,203 @@ function CareersContent() {
             <Header />
 
             {/* Hero Section */}
-            <header className="bg-white border-b border-gray-100 py-20 px-8 text-center text-[#000000]">
-                <div className="max-w-[1200px] mx-auto space-y-4">
+            <header className="relative bg-white pt-24 pb-20 px-8 overflow-hidden">
+                {/* Modern background elements */}
+                <div className="absolute top-0 right-0 -mr-20 -mt-20 w-[600px] h-[600px] bg-[#FDF22F]/5 rounded-full blur-[120px] pointer-events-none" />
+                <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-[400px] h-[400px] bg-blue-50/10 rounded-full blur-[100px] pointer-events-none" />
+                
+                <div className="max-w-[1200px] mx-auto space-y-8 relative z-10 text-center">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FDF22F]/10 border border-[#FDF22F]/20 mb-4"
+                    >
+                        <span className="w-1.5 h-1.5 bg-[#FDF22F] rounded-full animate-pulse" />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#000000]/60">Career Opportunities</span>
+                    </motion.div>
+
                     <motion.h1
-                        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                        className="text-5xl font-black tracking-tight"
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                        className="text-6xl md:text-8xl font-black tracking-tighter text-black"
                     >
                         Join the Droga Pharma Team
                     </motion.h1>
+
                     <motion.p
-                        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-                        className="text-xl text-gray-500 max-w-2xl mx-auto leading-relaxed"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2, duration: 0.8 }}
+                        className="text-xl md:text-2xl text-gray-500 max-w-3xl mx-auto leading-relaxed font-medium"
                     >
-                        We're looking for passionate individuals to help us innovate in the pharmaceutical industry. Discover your next career move below.
+                        We&apos;re looking for passionate individuals to help us innovate in the pharmaceutical industry. Discover your next career move below.
                     </motion.p>
 
-                    {/* Applicant Portal CTA — Always visible */}
                     <motion.div
-                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-                        className="flex items-center justify-center gap-3 pt-4"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.4, duration: 0.8 }}
+                        className="flex flex-col items-center gap-6 pt-8"
                     >
-                        <div className="h-px w-12 bg-gray-200" />
-                        <Link
-                            href="/my-applications"
-                            className="inline-flex items-center gap-2 bg-black text-[#FDF22F] px-6 py-3 rounded-full text-[11px] font-black uppercase tracking-widest hover:bg-[#FDF22F] hover:text-black transition-all shadow-lg shadow-black/10 hover:shadow-[#FDF22F]/30"
-                        >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                            Already Applied? Track Your Application →
-                        </Link>
-                        <div className="h-px w-12 bg-gray-200" />
+                        <div className="flex items-center justify-center gap-4">
+                            <div className="h-[1px] w-12 bg-gradient-to-r from-transparent to-gray-200" />
+                            <Link
+                                href="/my-applications"
+                                className="inline-flex items-center gap-2 bg-black text-[#FDF22F] px-8 py-4 rounded-full font-black text-[11px] uppercase tracking-widest hover:bg-gray-900 transition-all hover:-translate-y-1"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                Already Applied? Track Your Application →
+                            </Link>
+                            <div className="h-[1px] w-12 bg-gradient-to-l from-transparent to-gray-200" />
+                        </div>
                     </motion.div>
                 </div>
+
+                {/* Scrolldown indicator */}
+                <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 1, duration: 1 }}
+                    className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
+                >
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-300">Explore Jobs</span>
+                    <motion.div 
+                        animate={{ y: [0, 8, 0] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="w-1 h-6 bg-gradient-to-b from-gray-200 to-transparent rounded-full"
+                    />
+                </motion.div>
             </header>
 
             {/* Job List */}
-            <main className="max-w-[1000px] mx-auto py-16 px-8">
-                <div className="flex justify-between items-center mb-10">
-                    <h2 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">Open Positions ({jobs.length})</h2>
+            <main className="max-w-[1200px] mx-auto py-24 px-8">
+                <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
+                    <div className="space-y-1">
+                        <span className="text-[11px] font-black uppercase tracking-[0.3em] text-[#000000]/20">Open Positions ({jobs.length})</span>
+                    </div>
+                    <p className="text-gray-400 font-medium text-sm max-w-xs text-right hidden md:block">
+                        Filter by department or location to find your perfect match in our innovation hub.
+                    </p>
                 </div>
 
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center gap-4 py-20 text-[#000000]">
-                        <div className="w-8 h-8 border-4 border-[#000000] border-t-transparent rounded-full animate-spin" />
-                        <p className="text-gray-400 text-sm font-bold">Discovering opportunities…</p>
+                    <div className="flex flex-col items-center justify-center gap-6 py-32">
+                        <div className="relative w-16 h-16">
+                            <div className="absolute inset-0 border-4 border-gray-100 rounded-full" />
+                            <div className="absolute inset-0 border-4 border-[#FDF22F] border-t-transparent rounded-full animate-spin shadow-[0_0_15px_rgba(253,242,47,0.5)]" />
+                        </div>
+                        <p className="text-gray-400 text-sm font-black uppercase tracking-widest animate-pulse">Scanning the Hub...</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                         {jobs.map((job, idx) => (
                             <motion.div
                                 key={job.id}
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: idx * 0.05 }}
-                                className="group p-8 bg-white rounded-[40px] border border-gray-100 transition-all hover:border-[#000000]/10 hover:shadow-[-10px_20px_50px_rgba(0,0,0,0.05)] flex flex-col justify-between"
+                                initial={{ opacity: 0, y: 30 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: idx * 0.1, duration: 0.6 }}
+                                className="group relative p-8 bg-white rounded-[40px] border border-gray-100 transition-all duration-500 hover:border-[#FDF22F]/50 hover:shadow-[0_30px_60px_-15px_rgba(0,0,0,0.1)] flex flex-col justify-between overflow-hidden"
                             >
-                                <div className="space-y-4">
-                                    {/* Header Row */}
+                                {/* Background Accent on Hover */}
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-[#FDF22F]/10 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -mr-16 -mt-16" />
+
+                                <div className="space-y-6 relative z-10">
+                                    {/* Badge & Type Row */}
                                     <div className="flex justify-between items-start">
-                                        <div className="flex flex-col gap-2">
-                                            <span className="bg-[#FDF22F] text-[9px] font-black text-black px-3 py-1.5 rounded-lg uppercase tracking-widest shadow-sm w-fit">
+                                        <div className="w-12 h-12 rounded-full bg-[#FDF22F] flex flex-col items-center justify-center shadow-lg shadow-[#FDF22F]/30 border border-black/5 shrink-0 transition-transform duration-500 group-hover:scale-110">
+                                            <span className="text-[7px] font-black text-black/40 uppercase tracking-[0.2em] leading-none mb-0.5">REQ</span>
+                                            <span className="text-[16px] font-black text-black leading-none tracking-tighter">{job.id}</span>
+                                        </div>
+                                        <div className="flex flex-col items-end gap-1">
+                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest opacity-60">
+                                                {job.type || "full-time"}
+                                            </span>
+                                            <span className="bg-gray-50 text-[9px] font-black text-gray-500 px-3 py-1.5 rounded-full border border-gray-100 uppercase tracking-widest shadow-sm">
                                                 {job.department || "General"}
                                             </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Title & Organization */}
+                                    <div className="space-y-3">
+                                        <h3 className="text-2xl font-black text-[#000000] tracking-tight group-hover:text-[#FDF22F] transition-colors duration-300">
+                                            {job.title}
+                                        </h3>
+                                        <div className="flex flex-wrap gap-2">
+                                            <div className="flex items-center gap-1.5 px-3 py-1 bg-gray-50 rounded-full border border-gray-100/50">
+                                                <span className="text-red-400 text-sm">📍</span>
+                                                <span className="text-[11px] font-bold text-gray-500">{job.location}</span>
+                                            </div>
                                             {job.tenant?.name && (
-                                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                                                    <span className="w-1 h-1 bg-yellow-400 rounded-full" />
-                                                    {job.tenant.name}
-                                                </span>
+                                                <div className="flex items-center gap-1.5 px-3 py-1 bg-gray-50 rounded-full border border-gray-100/50">
+                                                    <span className="w-1.5 h-1.5 bg-[#FDF22F] rounded-full shadow-[0_0_8px_rgba(253,242,47,0.8)]" />
+                                                    <span className="text-[11px] font-bold text-gray-500 uppercase tracking-tighter">{job.tenant.name}</span>
+                                                </div>
                                             )}
                                         </div>
-                                        <span className="text-gray-400 text-[10px] font-bold lowercase opacity-60">
-                                            {job.type || "full-time"}
-                                        </span>
                                     </div>
 
-                                    {/* Title & Location */}
-                                    <div className="space-y-1">
-                                        <h3 className="text-xl font-black text-[#000000] tracking-tight">{job.title}</h3>
-                                        <div className="flex items-center gap-2 text-gray-400">
-                                            <span className="text-[#F87171] text-base leading-none">📍</span>
-                                            <span className="text-xs font-bold text-gray-400/80">{job.location}</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Status Badges Row - Matching Image Precisely */}
-                                    <div className="flex flex-wrap gap-3 pt-2">
-                                        {(job.published_at || job.created_at) && (
-                                            <div className="bg-white px-4 py-2.5 rounded-2xl flex items-center gap-2 border border-black/5 shadow-sm">
-                                                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    {/* Meta Row (Dates) */}
+                                    <div className="grid grid-cols-2 gap-3 pt-2">
+                                        <div className="bg-gray-50/50 p-3 rounded-2xl border border-gray-100 group-hover:bg-white group-hover:border-[#FDF22F]/20 transition-all duration-300">
+                                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Published</p>
+                                            <div className="flex items-center gap-2">
+                                                <svg className="w-3.5 h-3.5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                 </svg>
-                                                <span className="text-[11px] font-bold text-gray-700 whitespace-nowrap">
+                                                <span className="text-[11px] font-bold text-gray-700">
                                                     {(() => {
                                                         const published = job.published_at || job.created_at;
-                                                        if (!published) return 'Posted Recently';
-
+                                                        if (!published) return 'Recently';
                                                         const pDate = new Date(published);
                                                         const now = new Date();
-
-                                                        // Normalize to start of day for accurate day counting
                                                         const d1 = new Date(pDate.getFullYear(), pDate.getMonth(), pDate.getDate());
                                                         const d2 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-                                                        const diffTime = d2.getTime() - d1.getTime();
-                                                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-                                                        if (diffDays <= 0) return 'Posted Today';
-                                                        if (diffDays === 1) return 'Posted Yesterday';
-                                                        return `Posted ${diffDays} days ago`;
+                                                        const diffDays = Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+                                                        if (diffDays <= 0) return 'Today';
+                                                        if (diffDays === 1) return 'Yesterday';
+                                                        return `${diffDays}d ago`;
                                                     })()}
                                                 </span>
                                             </div>
-                                        )}
-                                        <div className="bg-[#FDF22F]/40 px-4 py-2.5 rounded-2xl flex items-center gap-2 shadow-sm border border-[#FDF22F]/20">
-                                            <svg className="w-4 h-4 text-black/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                            <span className="text-[11px] font-black text-black/80 whitespace-nowrap">
-                                                {(() => {
-                                                    if (!job.deadline) return 'No Deadline Set';
+                                        </div>
 
-                                                    const dDate = new Date(job.deadline);
-                                                    const now = new Date();
-
-                                                    // Format the exact date
-                                                    const exactDate = dDate.toLocaleDateString('en-US', {
-                                                        month: 'short',
-                                                        day: 'numeric',
-                                                        year: 'numeric'
-                                                    });
-
-                                                    // Normalize to start of day for countdown
-                                                    const d1 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                                                    const d2 = new Date(dDate.getFullYear(), dDate.getMonth(), dDate.getDate());
-
-                                                    const diffTime = d2.getTime() - d1.getTime();
-                                                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                                                    let countdown = '';
-                                                    if (diffDays < 0) countdown = '(Closed)';
-                                                    else if (diffDays === 0) countdown = '(Today)';
-                                                    else if (diffDays === 1) countdown = '(Tomorrow)';
-                                                    else countdown = `(${diffDays} days left)`;
-
-                                                    return `${exactDate} ${countdown}`;
-                                                })()}
-                                            </span>
+                                        <div className="bg-black p-3 rounded-2xl border border-black group-hover:bg-[#FDF22F] group-hover:border-[#FDF22F] transition-all duration-300">
+                                            <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest mb-1.5 group-hover:text-black/40">Deadline</p>
+                                            <div className="flex items-center gap-2">
+                                                <svg className="w-3.5 h-3.5 text-[#FDF22F] group-hover:text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                <span className="text-[11px] font-black text-[#FDF22F] group-hover:text-black whitespace-nowrap">
+                                                    {(() => {
+                                                        if (!job.deadline) return 'Open';
+                                                        const dDate = new Date(job.deadline);
+                                                        const now = new Date();
+                                                        const d1 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                                                        const d2 = new Date(dDate.getFullYear(), dDate.getMonth(), dDate.getDate());
+                                                        const diffDays = Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+                                                        if (diffDays < 0) return 'Closed';
+                                                        if (diffDays === 0) return 'Today';
+                                                        return `${diffDays}d left`;
+                                                    })()}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 <button
                                     onClick={() => handleApplyClick(job)}
-                                    className="w-full py-3.5 rounded-xl border-2 border-black/10 bg-transparent text-black font-black text-[11px] uppercase tracking-[0.1em] hover:bg-[#FDF22F] hover:text-black hover:border-[#FDF22F] transition-all transform active:scale-[0.98] mt-6"
+                                    className="relative w-full py-4 mt-8 rounded-[20px] bg-black text-[#FDF22F] font-black text-[12px] uppercase tracking-[0.1em] overflow-hidden group/btn transition-all duration-300 hover:shadow-xl hover:shadow-[#FDF22F]/20 active:scale-[0.98]"
                                 >
-                                    Apply Now —&gt;
+                                    <div className="absolute inset-0 bg-white opacity-0 group-hover/btn:opacity-10 transition-opacity" />
+                                    <span className="relative z-10 flex items-center justify-center gap-2">
+                                        Apply for position
+                                        <svg className="w-3.5 h-3.5 transform group-hover/btn:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                                        </svg>
+                                    </span>
                                 </button>
                             </motion.div>
                         ))}
@@ -680,7 +723,7 @@ function CareersContent() {
                                             🎉
                                         </div>
                                         <div className="space-y-2">
-                                            <h3 className="text-3xl font-black text-[#000000] tracking-tight">You're all set!</h3>
+                                            <h3 className="text-3xl font-black text-[#000000] tracking-tight">You&apos;re all set!</h3>
                                             <p className="text-gray-500 font-medium leading-relaxed max-w-sm mx-auto">
                                                 Your account has been created. Track your application status anytime from your personal dashboard.
                                             </p>

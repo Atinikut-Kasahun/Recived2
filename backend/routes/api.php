@@ -43,6 +43,7 @@ Route::middleware('mock.auth')->group(function () {
             Route::get('/applicants', [\App\Http\Controllers\ApplicantController::class, 'index']);
             Route::post('/applicants', [\App\Http\Controllers\ApplicantController::class, 'store']);
             Route::patch('/applicants/{id}/status', [\App\Http\Controllers\ApplicantController::class, 'updateStatus']);
+            Route::patch('/applicants/{id}/employment-status', [\App\Http\Controllers\ApplicantController::class, 'updateEmploymentStatus']);
             Route::post('/applicants/{id}/mention', [\App\Http\Controllers\ApplicantController::class, 'mention']);
 
             // Interview Management

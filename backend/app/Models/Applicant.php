@@ -38,6 +38,9 @@ class Applicant extends Model
         'applicant_token',   // session token for portal auth
         'password_reset_token',
         'password_reset_expires_at',
+        'employment_status',    // 'active' | 'resigned' | 'terminated'
+        'separation_date',
+        'separation_reason',
     ];
 
     protected $hidden = [
