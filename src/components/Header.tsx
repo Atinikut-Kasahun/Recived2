@@ -47,112 +47,97 @@ export default function Header() {
                     : "bg-white py-5"
                     }`}
             >
-                <div className="max-w-7xl mx-auto px-6 md:px-8 flex justify-between items-center">
-                    {/* Logo & Brand */}
-                    <motion.div whileHover="hover" className="relative shrink-0">
-                        <Link href="/" className="flex flex-col group relative">
-                            <div className="flex items-center">
-                                <motion.span
-                                    variants={{ hover: { x: 2 } }}
-                                    transition={{ duration: 0.3, ease: "easeOut" }}
-                                    className="text-[#000000] font-black text-2xl md:text-3xl tracking-tight leading-none"
-                                >
-                                    DROGA
-                                </motion.span>
-                                <motion.span
-                                    variants={{ hover: { x: 4 } }}
-                                    transition={{ duration: 0.3, ease: "easeOut" }}
-                                    className="text-[#000000]/60 font-medium text-2xl md:text-3xl tracking-tight ml-2 leading-none"
-                                >
-                                    GROUP
-                                </motion.span>
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                                <div className="h-[0.5px] w-4 bg-[#000000]/40" />
-                                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#000000]/60 whitespace-nowrap">
-                                    Hiring Hub
-                                </span>
-                                <motion.div
-                                    variants={{ hover: { scaleX: 1.1, originX: 0 } }}
-                                    className="h-[0.5px] w-full bg-[#000000]/40 flex-1"
-                                />
-                            </div>
-                        </Link>
-                    </motion.div>
-
-                    {/* Nav */}
-                    <nav className="flex items-center gap-4 lg:gap-10">
-                        <div className="hidden lg:flex items-center gap-10">
-                            {["Jobs", "About Us", "Contact"].map((item, i) => (
-                                <motion.a
-                                    key={item}
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ duration: 0.5, delay: i * 0.1 }}
-                                    href={`/${item.toLowerCase() === "about us" ? "#about-us" : item.toLowerCase() === "contact" ? "#contact" : "#" + item.toLowerCase()}`}
-                                    className="text-[13px] font-black tracking-wider transition-all hover:text-black hover:bg-[#FDF22F] px-4 py-2 rounded-lg text-[#000000]/80"
-                                >
-                                    {item}
-                                </motion.a>
-                            ))}
-
-                            {user ? (
-                                <div className="flex items-center gap-6 pl-4 border-l border-[#000000]/10">
-                                    <Link
-                                        href="/dashboard"
-                                        className="text-[13px] font-black uppercase tracking-wider text-[#000000] hover:text-[#000000] transition-colors"
+                <div className="max-w-7xl mx-auto px-6 md:px-8 flex items-center justify-between h-full">
+                    {/* Logo - Far Left */}
+                    <div className="flex-1 flex justify-start">
+                        <motion.div whileHover="hover" className="relative shrink-0">
+                            <Link href="/" className="flex flex-col group relative">
+                                <div className="flex items-center">
+                                    <motion.span
+                                        variants={{ hover: { x: 2 } }}
+                                        transition={{ duration: 0.3, ease: "easeOut" }}
+                                        className="text-[#000000] font-black text-2xl md:text-3xl tracking-tight leading-none"
                                     >
-                                        Dashboard
-                                    </Link>
-                                    <button
-                                        onClick={handleLogout}
-                                        className="text-[13px] font-black uppercase tracking-wider text-red-500/80 hover:text-red-600 transition-colors"
+                                        DROGA
+                                    </motion.span>
+                                    <motion.span
+                                        variants={{ hover: { x: 4 } }}
+                                        transition={{ duration: 0.3, ease: "easeOut" }}
+                                        className="text-[#000000]/60 font-medium text-2xl md:text-3xl tracking-tight ml-2 leading-none"
                                     >
-                                        Logout
-                                    </button>
+                                        GROUP
+                                    </motion.span>
                                 </div>
-                            ) : (
-                                <div className="flex items-center gap-3 pl-4 border-l border-[#000000]/10">
-                                    {/* Premium Track Application CTA */}
-                                    <Link
-                                        href="/my-applications"
-                                        className="group relative flex items-center gap-2.5 bg-[#FDF22F] hover:bg-black text-black hover:text-[#FDF22F] pl-2 pr-5 py-2 rounded-full font-black text-[11px] uppercase tracking-widest transition-all duration-300 shadow-lg shadow-[#FDF22F]/40 hover:shadow-black/20 hover:-translate-y-0.5 active:scale-95"
-                                    >
-                                        {/* Avatar circle */}
-                                        <div className="relative w-7 h-7 rounded-full bg-black group-hover:bg-[#FDF22F] flex items-center justify-center shrink-0 transition-colors duration-300">
-                                            {applicantToken ? (
-                                                <span className="text-[#FDF22F] group-hover:text-black font-black text-[11px] transition-colors duration-300">●</span>
-                                            ) : (
-                                                <svg className="w-3.5 h-3.5 text-[#FDF22F] group-hover:text-black transition-colors duration-300" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
-                                            )}
-                                            {/* Pulsing green live dot */}
-                                            <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border-2 border-[#FDF22F] group-hover:border-black transition-colors duration-300"></span>
-                                            </span>
-                                        </div>
-                                        <span className="whitespace-nowrap">
-                                            {applicantToken ? 'My Applications' : 'Track Application'}
-                                        </span>
-                                        <svg className="w-3 h-3 opacity-60 group-hover:translate-x-0.5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" /></svg>
-                                    </Link>
-
-                                    <Link
-                                        href="/login"
-                                        className="text-[12px] font-bold tracking-wider text-[#000000]/50 hover:text-black transition-colors"
-                                    >
-                                        Staff Login
-                                    </Link>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <div className="h-[0.5px] w-4 bg-[#000000]/40" />
+                                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#000000]/60 whitespace-nowrap">
+                                        Hiring Hub
+                                    </span>
+                                    <motion.div
+                                        variants={{ hover: { scaleX: 1.1, originX: 0 } }}
+                                        className="h-[0.5px] w-full bg-[#000000]/40 flex-1"
+                                    />
                                 </div>
-                            )}
-                        </div>
+                            </Link>
+                        </motion.div>
+                    </div>
+
+                    {/* Nav - Centered */}
+                    <nav className="hidden lg:flex flex-1 justify-center items-center gap-8">
+                        {["Jobs", "About Us", "Contact"].map((item, i) => (
+                            <motion.a
+                                key={item}
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.5, delay: i * 0.1 }}
+                                href={`/${item.toLowerCase() === "about us" ? "#about-us" : item.toLowerCase() === "contact" ? "#contact" : "#" + item.toLowerCase()}`}
+                                className="text-[14px] font-bold text-gray-600 hover:text-black transition-colors duration-200"
+                            >
+                                {item}
+                            </motion.a>
+                        ))}
+                    </nav>
+
+                    {/* CTAs - Far Right */}
+                    <div className="flex-1 flex justify-end items-center gap-4">
+                        {user ? (
+                            <div className="hidden lg:flex items-center gap-6 pr-4 border-r border-gray-100">
+                                <Link
+                                    href="/dashboard"
+                                    className="text-[13px] font-black uppercase tracking-wider text-black hover:opacity-70 transition-opacity"
+                                >
+                                    Dashboard
+                                </Link>
+                                <button
+                                    onClick={handleLogout}
+                                    className="text-[13px] font-black uppercase tracking-wider text-red-500 hover:text-red-600 transition-colors"
+                                >
+                                    Logout
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="hidden lg:flex items-center gap-6 pr-4">
+                                <Link
+                                    href="/login"
+                                    className="text-[13px] font-bold text-gray-400 hover:text-black transition-colors"
+                                >
+                                    Staff Login
+                                </Link>
+                                <Link
+                                    href="/my-applications"
+                                    className="text-[13px] font-bold text-gray-600 hover:text-black transition-colors flex items-center gap-1.5"
+                                >
+                                    {applicantToken ? 'My Applications' : 'Track Application'}
+                                </Link>
+                            </div>
+                        )}
 
                         <motion.a
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.5, delay: 0.5 }}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.5, delay: 0.4 }}
                             href="#jobs"
-                            className="bg-[#000000] text-white text-[10px] md:text-[11px] font-black uppercase tracking-[0.1em] px-6 md:px-10 py-3 md:py-4 rounded-full hover:bg-black transition-all hover:shadow-2xl hover:shadow-[#000000]/20 whitespace-nowrap"
+                            className="bg-[#FDF22F] text-black text-[11px] font-black uppercase tracking-widest px-8 py-3.5 rounded-lg hover:bg-black hover:text-[#FDF22F] transition-all duration-300 shadow-lg shadow-[#FDF22F]/20 hover:shadow-black/20 transform hover:-translate-y-0.5 active:scale-95 whitespace-nowrap"
                         >
                             View Positions →
                         </motion.a>
@@ -160,24 +145,24 @@ export default function Header() {
                         {/* Hamburger Button */}
                         <button
                             onClick={() => setIsMenuOpen(!isMenuOpen)}
-                            className="lg:hidden w-10 h-10 flex items-center justify-center bg-[#000000]/5 rounded-full z-[60]"
+                            className="lg:hidden w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full z-[60]"
                         >
                             <div className="flex flex-col gap-1 w-5">
                                 <motion.div
                                     animate={isMenuOpen ? { rotate: 45, y: 5 } : { rotate: 0, y: 0 }}
-                                    className="h-0.5 w-full bg-[#000000] rounded-full"
+                                    className="h-0.5 w-full bg-black rounded-full"
                                 />
                                 <motion.div
                                     animate={isMenuOpen ? { opacity: 0, x: -10 } : { opacity: 1, x: 0 }}
-                                    className="h-0.5 w-full bg-[#000000] rounded-full"
+                                    className="h-0.5 w-full bg-black rounded-full"
                                 />
                                 <motion.div
                                     animate={isMenuOpen ? { rotate: -45, y: -5 } : { rotate: 0, y: 0 }}
-                                    className="h-0.5 w-full bg-[#000000] rounded-full"
+                                    className="h-0.5 w-full bg-black rounded-full"
                                 />
                             </div>
                         </button>
-                    </nav>
+                    </div>
                 </div>
             </motion.header>
 
