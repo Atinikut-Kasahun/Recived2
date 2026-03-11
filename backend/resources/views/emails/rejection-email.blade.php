@@ -14,7 +14,7 @@
 
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
-            background: #f0f4f8;
+            background: #F5F6FA;
         }
 
         .wrapper {
@@ -27,7 +27,7 @@
         }
 
         .header {
-            background: linear-gradient(135deg, #1A2B3D 0%, #374151 100%);
+            background: #FDF22F;
             padding: 48px;
         }
 
@@ -39,8 +39,8 @@
         }
 
         .logo-box {
-            background: #fff;
-            color: #1A2B3D;
+            background: #000000;
+            color: #FDF22F;
             width: 36px;
             height: 36px;
             border-radius: 8px;
@@ -52,7 +52,7 @@
         }
 
         .logo-name {
-            color: #fff;
+            color: #000000;
             font-weight: 900;
             font-size: 20px;
             letter-spacing: -0.5px;
@@ -60,27 +60,27 @@
 
         .badge {
             display: inline-block;
-            background: rgba(255, 255, 255, .1);
-            color: #d1d5db;
+            background: #111;
+            color: #FDF22F;
             font-size: 10px;
             font-weight: 800;
             letter-spacing: 3px;
             text-transform: uppercase;
             padding: 6px 14px;
             border-radius: 100px;
-            border: 1px solid rgba(255, 255, 255, .15);
+            border: 1px solid #333;
             margin-bottom: 16px;
         }
 
         .header h1 {
-            color: #fff;
+            color: #000;
             font-size: 26px;
             font-weight: 900;
             line-height: 1.25;
         }
 
         .header p {
-            color: rgba(255, 255, 255, .6);
+            color: rgba(0, 0, 0, .6);
             font-size: 14px;
             margin-top: 6px;
         }
@@ -91,13 +91,13 @@
 
         .greeting {
             font-size: 16px;
-            color: #1A2B3D;
+            color: #111;
             font-weight: 700;
             margin-bottom: 16px;
         }
 
         .intro {
-            color: #4a5568;
+            color: #444;
             font-size: 15px;
             line-height: 1.7;
             margin-bottom: 24px;
@@ -117,12 +117,12 @@
         .pos-icon {
             width: 44px;
             height: 44px;
-            background: #1A2B3D;
+            background: #FDF22F;
             border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #fff;
+            color: #000;
             font-size: 20px;
             flex-shrink: 0;
         }
@@ -138,23 +138,23 @@
         .pos-value {
             font-size: 16px;
             font-weight: 900;
-            color: #1A2B3D;
+            color: #111;
             margin-top: 2px;
         }
 
         .note-box {
-            background: #f0fdf4;
-            border: 1.5px solid #bbf7d0;
+            background: #fffbea;
+            border: 1.5px solid #fef08a;
             border-radius: 14px;
             padding: 24px 28px;
             margin-bottom: 28px;
-            border-left: 4px solid #1F7A6E;
+            border-left: 4px solid #FDF22F;
         }
 
         .note-label {
             font-size: 10px;
             font-weight: 800;
-            color: #1F7A6E;
+            color: #000;
             text-transform: uppercase;
             letter-spacing: 2px;
             margin-bottom: 8px;
@@ -162,13 +162,13 @@
 
         .note-text {
             font-size: 15px;
-            color: #374151;
+            color: #444;
             line-height: 1.7;
             font-style: italic;
         }
 
         .encouragement {
-            background: linear-gradient(135deg, #1A2B3D 0%, #1F7A6E 100%);
+            background: #000000;
             border-radius: 14px;
             padding: 28px;
             margin-bottom: 28px;
@@ -182,11 +182,11 @@
         }
 
         .encouragement strong {
-            color: #fff;
+            color: #FDF22F;
         }
 
         .closing {
-            color: #4a5568;
+            color: #444;
             font-size: 15px;
             line-height: 1.7;
             margin-bottom: 28px;
@@ -197,37 +197,49 @@
         }
 
         .sig strong {
-            color: #1A2B3D;
+            color: #111;
             font-size: 15px;
         }
 
         .sig span {
-            color: #1F7A6E;
+            color: #666;
             font-size: 13px;
             display: block;
             margin-top: 2px;
         }
 
         .footer {
-            background: #1A2B3D;
+            background: #F5F6FA;
             padding: 28px 48px;
             text-align: center;
         }
 
         .footer p {
-            color: rgba(255, 255, 255, .45);
+            color: #bbb;
             font-size: 11px;
             line-height: 1.7;
         }
 
         .footer strong {
-            color: rgba(255, 255, 255, .8);
+            color: #888;
         }
     </style>
 </head>
 
 <body>
     <div class="wrapper">
+        <div style="background-color: #ffffff; padding: 32px 40px 16px; text-align: center;">
+            <div style="font-family: Arial, sans-serif; display: inline-block;">
+                <span
+                    style="display: inline-block; background-color: #FDF22F; color: #000000; padding: 4px 10px; border-radius: 6px; font-weight: 900; font-size: 20px; letter-spacing: -1px; margin-right: 6px; border: 2px solid #000000; box-shadow: 2px 2px 0px #000000; vertical-align: middle;">D</span>
+                <span
+                    style="color: #000000; font-weight: 900; font-size: 22px; letter-spacing: -1px; vertical-align: middle;">DROGA
+                    GROUP</span>
+                <span
+                    style="color: #666666; font-weight: 300; font-size: 22px; letter-spacing: -0.5px; vertical-align: middle; margin-left: 6px;">HIRING
+                    HUB</span>
+            </div>
+        </div>
         <div class="header">
             <div class="logo">
                 <div class="logo-box">D</div>
@@ -254,7 +266,8 @@
                     <div class="pos-value">{{ $jobPosting->title }}</div>
                     @if($jobPosting->department)
                         <div style="font-size:12px;color:#6b7280;margin-top:2px;">{{ $jobPosting->department }} ·
-                            {{ $jobPosting->location ?? 'Addis Ababa' }}</div>
+                            {{ $jobPosting->location ?? 'Addis Ababa' }}
+                        </div>
                     @endif
                 </div>
             </div>
@@ -295,7 +308,8 @@
         <div class="footer">
             <p>This notification was sent as part of our transparent recruitment process.</p>
             <p style="margin-top:6px;">© {{ date('Y') }}
-                <strong>{{ $applicant->tenant->name ?? 'Droga Pharma' }}</strong>. All rights reserved.</p>
+                <strong>{{ $applicant->tenant->name ?? 'Droga Pharma' }}</strong>. All rights reserved.
+            </p>
         </div>
     </div>
 </body>

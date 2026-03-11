@@ -8,16 +8,10 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #1a202c; }
         .wrapper { max-width: 620px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
-        .header { padding: 40px 40px 32px; text-align: center; }
-        .header.written_exam     { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); }
-        .header.technical_interview { background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%); }
-        .header.final_interview  { background: linear-gradient(135deg, #d97706 0%, #b45309 100%); }
-        .header.offer            { background: linear-gradient(135deg, #059669 0%, #047857 100%); }
-        .header.hired            { background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); }
-        .header.rejected         { background: linear-gradient(135deg, #64748b 0%, #475569 100%); }
+        .header { padding: 40px 40px 32px; text-align: center; background: #FDF22F; }
         .header .icon { font-size: 48px; margin-bottom: 16px; display: block; }
-        .header h1 { color: #ffffff; font-size: 24px; font-weight: 700; line-height: 1.3; }
-        .header p  { color: rgba(255,255,255,0.85); font-size: 14px; margin-top: 8px; }
+        .header h1 { color: #000000; font-size: 24px; font-weight: 900; line-height: 1.3; }
+        .header p  { color: rgba(0,0,0,0.6); font-size: 14px; margin-top: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
         .body      { padding: 36px 40px; }
         .greeting  { font-size: 17px; font-weight: 600; color: #1a202c; margin-bottom: 16px; }
         .message   { font-size: 15px; line-height: 1.7; color: #4a5568; margin-bottom: 24px; }
@@ -31,19 +25,13 @@
             font-size: 13px;
             font-weight: 700;
         }
-        .badge-written_exam        { background: #ede9fe; color: #4f46e5; }
-        .badge-technical_interview { background: #e0f2fe; color: #0891b2; }
-        .badge-final_interview     { background: #fef3c7; color: #d97706; }
-        .badge-offer               { background: #d1fae5; color: #059669; }
-        .badge-hired               { background: #bbf7d0; color: #16a34a; }
+        .badge-written_exam        { background: #111; color: #FDF22F; }
+        .badge-technical_interview { background: #111; color: #FDF22F; }
+        .badge-final_interview     { background: #111; color: #FDF22F; }
+        .badge-offer               { background: #111; color: #FDF22F; }
+        .badge-hired               { background: #111; color: #FDF22F; }
         .badge-rejected            { background: #f1f5f9; color: #64748b; }
-        .cta-btn { display: block; width: fit-content; margin: 0 auto 28px; padding: 14px 36px; border-radius: 8px; text-decoration: none; font-size: 15px; font-weight: 700; text-align: center; }
-        .cta-written_exam        { background: #4f46e5; color: #ffffff; }
-        .cta-technical_interview { background: #0891b2; color: #ffffff; }
-        .cta-final_interview     { background: #d97706; color: #ffffff; }
-        .cta-offer               { background: #059669; color: #ffffff; }
-        .cta-hired               { background: #16a34a; color: #ffffff; }
-        .cta-rejected            { background: #64748b; color: #ffffff; }
+        .cta-btn { display: block; width: fit-content; margin: 0 auto 28px; padding: 14px 36px; border-radius: 12px; text-decoration: none; font-size: 15px; font-weight: 900; text-align: center; background: #FDF22F; color: #000000; text-transform: uppercase; letter-spacing: 1px; }
         .divider { border: none; border-top: 1px solid #e2e8f0; margin: 28px 0; }
         .footer { padding: 24px 40px; background: #f8fafc; text-align: center; border-top: 1px solid #e2e8f0; }
         .footer p { font-size: 12px; color: #94a3b8; line-height: 1.6; }
@@ -52,6 +40,15 @@
 </head>
 <body>
 <div class="wrapper">
+
+    {{-- ── LOGO HEADER (Workable style) ── --}}
+    <div style="background-color: #ffffff; padding: 32px 40px 16px; text-align: center;">
+        <div style="font-family: Arial, sans-serif; display: inline-block;">
+            <span style="display: inline-block; background-color: #FDF22F; color: #000000; padding: 4px 10px; border-radius: 6px; font-weight: 900; font-size: 20px; letter-spacing: -1px; margin-right: 6px; border: 2px solid #000000; box-shadow: 2px 2px 0px #000000; vertical-align: middle;">D</span>
+            <span style="color: #000000; font-weight: 900; font-size: 22px; letter-spacing: -1px; vertical-align: middle;">DROGA GROUP</span>
+            <span style="color: #666666; font-weight: 300; font-size: 22px; letter-spacing: -0.5px; vertical-align: middle; margin-left: 6px;">HIRING HUB</span>
+        </div>
+    </div>
 
     {{-- ── HEADER (colour changes per status) ── --}}
     <div class="header {{ $newStatus }}">
@@ -152,6 +149,87 @@
             </p>
         @endif
 
+
+
+        {{-- OFFER DETAILS SECTION --}}
+        @if($newStatus === 'offer' && $applicant->offered_salary)
+            <div style="background: #FDF22F; border-radius: 16px; padding: 32px 24px; margin-bottom: 24px; text-align: center; border: 2px solid #000; box-shadow: 0 10px 15px -3px rgba(253, 242, 47, 0.2);">
+                <div style="font-size: 11px; font-weight: 900; color: #000; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; opacity: 0.5;">OFFICIAL OFFER</div>
+                <div style="font-size: 13px; font-weight: 900; color: #000; margin-bottom: 6px; letter-spacing: 0.5px;">PROPOSED MONTHLY SALARY</div>
+                <div style="font-size: 40px; font-weight: 950; color: #000; line-height: 1; margin-bottom: 20px;">
+                    {{ number_format($applicant->offered_salary, 2) }} <span style="font-size: 16px; font-weight: 700;">ETB</span>
+                </div>
+                
+                @if($applicant->start_date)
+                    <div style="display:inline-block; padding: 10px 20px; background: #000; border-radius: 12px; font-size: 12px; font-weight: 800; color: #FDF22F; text-transform: uppercase; letter-spacing: 1px;">
+                        📅 Target Start Date: {{ date('F j, Y', strtotime($applicant->start_date)) }}
+                    </div>
+                @endif
+            </div>
+        @endif
+
+        {{-- SCORE / RESULTS SECTION --}}
+        @if(isset($score) && $score !== null)
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 24px; text-align: center;">
+                <div style="font-size: 11px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+                    @if($score == $applicant->written_exam_score)
+                        WRITTEN EXAM RESULT
+                    @elseif($score == $applicant->technical_interview_score)
+                        TECHNICAL INTERVIEW RESULT
+                    @else
+                        ASSESSMENT RESULT
+                    @endif
+                </div>
+                <div style="font-size: 48px; font-weight: 900; color: #000; line-height: 1;">{{ $score }}<span style="font-size: 20px; color: #94a3b8;">%</span></div>
+            </div>
+        @endif
+
+        {{-- TA TEAM ASSESSOR FEEDBACK & NOTES --}}
+        @if($applicant->interviewer_feedback)
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 24px; border-left: 6px solid #FDF22F; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                <div style="font-size: 11px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">ASSESSOR'S FEEDBACK & NOTES</div>
+                <div style="font-size: 15px; color: #334155; line-height: 1.6; font-style: italic;">
+                    "{{ $applicant->interviewer_feedback }}"
+                </div>
+            </div>
+        @endif
+
+        {{-- ATTACHED DOCUMENTS NOTIFICATION --}}
+        @if(isset($examPaperPath) && $examPaperPath)
+            <div style="text-align: center; margin-bottom: 24px;">
+                <div style="margin-top: 16px; display: inline-block; padding: 8px 16px; background: #e2e8f0; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 700; color: #475569;">
+                    📎 Written Exam Paper Attached
+                </div>
+            </div>
+        @endif
+
+        {{-- INTERVIEW / EXAM SCHEDULE DETAILS --}}
+        @if(isset($interview) && $interview)
+            <div style="background: #FFFBEB; border: 2px solid #FDF22F; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+                <div style="font-size: 11px; font-weight: 900; color: #8B8B00; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">SCHEDULED DETAILS</div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 4px;">DATE & TIME</div>
+                        <div style="font-size: 15px; font-weight: 700; color: #000;">{{ $interview->scheduled_at->format('l, F j, Y') }} at {{ $interview->scheduled_at->format('g:i A') }}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 4px;">LOCATION / MODE</div>
+                        <div style="font-size: 15px; font-weight: 700; color: #000;">{{ $interview->location ?? 'To be announced' }}</div>
+                    </div>
+                </div>
+
+                @if((isset($interviewMessage) && $interviewMessage) || (isset($interview) && $interview->message))
+                    <div style="margin-top: 16px; padding: 16px; background: #ffffff; border-radius: 12px; border: 1px solid #FDF22F; box-shadow: inset 0 0 10px rgba(253, 242, 47, 0.1);">
+                        <div style="font-size: 10px; font-weight: 900; color: #8B8B00; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">STAGE INSTRUCTIONS & MESSAGE</div>
+                        <div style="font-size: 14px; color: #000; line-height: 1.5; font-style: italic;">
+                            "{{ $interviewMessage ?? $interview->message }}"
+                        </div>
+                    </div>
+                @endif
+            </div>
+        @endif
+
         {{-- Application details card --}}
         <div class="stage-card">
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
@@ -189,8 +267,8 @@
         {{-- CTA button (not shown for rejected) --}}
         @if($newStatus !== 'rejected')
             <a href="{{ config('app.frontend_url', 'http://localhost:3000') }}/applicant/portal"
-               class="cta-btn cta-{{ $newStatus }}">
-                View Your Application Portal →
+               class="cta-btn">
+                View Application Portal →
             </a>
         @endif
 

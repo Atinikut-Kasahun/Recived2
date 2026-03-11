@@ -4,8 +4,9 @@ namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use App\Mail\StatusChanged;
+use Illuminate\Mail\Mailable;
 
 class ApplicantStatusUpdated extends Notification
 {
@@ -41,56 +42,13 @@ class ApplicantStatusUpdated extends Notification
     /**
      * Get the mail representation of the notification.
      */
-    public function toMail(object $notifiable): MailMessage
+    public function toMail(object $notifiable): Mailable
     {
-        $statusLabels = [
-            'written_exam' => 'Written Exam Stage',
-            'technical_interview' => 'Technical Interview Stage',
-            'final_interview' => 'Final Interview Stage',
-            'offer' => 'Job Offer',
-            'hired' => 'Hired 🎉',
-            'rejected' => 'Application Update'
-        ];
-
-        $status = $statusLabels[$this->newStatus] ?? 'Application Update';
-        $jobTitle = $this->applicant->jobPosting->title ?? 'Position';
-
-        $mail = (new MailMessage)
-            ->subject("Important Update: Your Application for {$jobTitle}")
-            ->greeting("Hello {$this->applicant->name},");
-
-        if ($this->newStatus === 'written_exam') {
-            $mail->line("Congratulations! You have been shortlisted for the **Written Exam** for the {$jobTitle} position.")
-                ->line("Please log in to your dashboard for instructions and to track your progress.");
-        } elseif ($this->newStatus === 'technical_interview') {
-            $mail->line("Great news! You have advanced to the **Technical Interview** stage for {$jobTitle}.")
-                ->line("Our team will reach out to schedule a suitable time, or keep an eye on your dashboard for updates.");
-        } elseif ($this->newStatus === 'final_interview') {
-            $mail->line("You've reached the **Final Interview** stage! This is an important step in our hiring process.")
-                ->line("We are impressed with your profile and look forward to the next conversation.");
-        } elseif ($this->newStatus === 'offer') {
-            $mail->line("We are excited to extend an **Offer** to you for the {$jobTitle} position!")
-                ->line("Welcome to the team (preliminary)! Please check your dashboard for details.");
-        } elseif ($this->newStatus === 'rejected') {
-            $mail->line("Thank you for your interest in the {$jobTitle} position.")
-                ->line("After careful review, we've decided to move forward with other candidates at this time.")
-                ->line("We wish you the best in your career pursuits.");
-        } else {
-            $mail->line("There has been an update on your application for the **{$jobTitle}** position.")
-                ->line("Your status has been updated to: **{$status}**.");
-        }
-
-        if ($this->applicant->written_exam_score && $this->newStatus === 'written_exam') {
-            $mail->line("Your written exam score: **{$this->applicant->written_exam_score}%**");
-        }
-
-        if ($this->applicant->technical_interview_score && $this->newStatus === 'technical_interview') {
-            $mail->line("Your technical interview score: **{$this->applicant->technical_interview_score}%**");
-        }
-
-        return $mail
-            ->action('View My Dashboard', url('/my-applications'))
-            ->line('Droga Group Talent Acquisition Team');
+        return (new StatusChanged(
+            $this->applicant,
+            $this->oldStatus,
+            $this->newStatus
+        ))->to($notifiable->email);
     }
 
     /**

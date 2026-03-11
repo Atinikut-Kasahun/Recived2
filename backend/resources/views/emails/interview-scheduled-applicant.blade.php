@@ -22,8 +22,8 @@
         }
 
         .header {
-            background-color: #1F7A6E;
-            color: #ffffff;
+            background-color: #FDF22F;
+            color: #000000;
             padding: 40px;
             text-align: center;
         }
@@ -74,11 +74,11 @@
 
         .custom-message {
             padding: 20px;
-            background: #F0F9F8;
-            border-left: 4px solid #1F7A6E;
+            background: #F9FAFB;
+            border-left: 4px solid #FDF22F;
             margin: 24px 0;
             font-style: italic;
-            color: #155A50;
+            color: #333;
             border-radius: 0 12px 12px 0;
         }
 
@@ -95,7 +95,8 @@
         }
 
         .highlight {
-            color: #1F7A6E;
+            color: #000;
+            background-color: #FDF22F;
             font-weight: 700;
         }
 
@@ -114,6 +115,18 @@
 
 <body>
     <div class="container">
+        <div style="background-color: #ffffff; padding: 32px 40px 16px; text-align: center;">
+            <div style="font-family: Arial, sans-serif; display: inline-block;">
+                <span
+                    style="display: inline-block; background-color: #FDF22F; color: #000000; padding: 4px 10px; border-radius: 6px; font-weight: 900; font-size: 20px; letter-spacing: -1px; margin-right: 6px; border: 2px solid #000000; box-shadow: 2px 2px 0px #000000; vertical-align: middle;">D</span>
+                <span
+                    style="color: #000000; font-weight: 900; font-size: 22px; letter-spacing: -1px; vertical-align: middle;">DROGA
+                    GROUP</span>
+                <span
+                    style="color: #666666; font-weight: 300; font-size: 22px; letter-spacing: -0.5px; vertical-align: middle; margin-left: 6px;">HIRING
+                    HUB</span>
+            </div>
+        </div>
         <div class="header">
             <h1>Interview Invitation</h1>
         </div>

@@ -65,7 +65,7 @@ Route::middleware('mock.auth')->group(function () {
 
             Route::get('/users', [\App\Http\Controllers\MessageController::class, 'users']);
             Route::post('/messages/send', [\App\Http\Controllers\MessageController::class, 'send']);
-            Route::get('/team-users', [\App\Http\Controllers\UserController::class, 'index']); // New management route
+            Route::get('/team-users', [\App\Http\Controllers\UserController::class, 'index']);
 
             // Employee Management & Turnover Tracking
             Route::get('/employees', [\App\Http\Controllers\EmployeeController::class, 'index']);
@@ -120,6 +120,13 @@ Route::prefix('v1')->group(function () {
     Route::get('/public/events', [\App\Http\Controllers\GroupContentController::class, 'listEvents']);
     Route::get('/public/jobs', [\App\Http\Controllers\JobPostingController::class, 'publicIndex']);
     Route::get('/public/jobs/{id}', [\App\Http\Controllers\JobPostingController::class, 'publicShow']);
+
+    // ─────────────────────────────────────────────────────────
+    // EMAIL VERIFICATION (OTP) — used by the public careers page
+    // ─────────────────────────────────────────────────────────
+    Route::post('/public/send-otp', [\App\Http\Controllers\OtpController::class, 'send']);
+    Route::post('/public/verify-otp', [\App\Http\Controllers\OtpController::class, 'verify']);
+
     Route::post('/apply', [\App\Http\Controllers\JobApplicationController::class, 'store']);
 
     // Applicant Account (self-service portal)
@@ -139,10 +146,17 @@ Route::prefix('v1')->group(function () {
     Route::delete('/applicant/notifications/{id}', [\App\Http\Controllers\ApplicantAuthController::class, 'deleteNotification']);
     Route::post('/applicant/notifications/mark-all-read', [\App\Http\Controllers\ApplicantAuthController::class, 'markAllNotificationsRead']);
 
-    // Public Document Access (Simplified for viewing)
+    // ─────────────────────────────────────────────────────────
+    // PUBLIC DOCUMENT ACCESS
+    // Opens files inline in the browser (PDF viewer).
+    // ✅ Fixed for Windows: uses DIRECTORY_SEPARATOR to avoid
+    //    mixed slash paths like storage\\app\/public\/resumes\/
+    // ─────────────────────────────────────────────────────────
     Route::get('/applicants/{id}/resume', function ($id) {
         $applicant = \App\Models\Applicant::findOrFail($id);
-        $path = storage_path('app/public/' . $applicant->resume_path);
+
+        $resumePath = ltrim(str_replace(['\\', '/'], DIRECTORY_SEPARATOR, $applicant->resume_path), DIRECTORY_SEPARATOR);
+        $path = storage_path('app' . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . $resumePath);
 
         if (!file_exists($path)) {
             return response()->json(['error' => 'File not found at ' . $path], 404);
@@ -162,10 +176,12 @@ Route::prefix('v1')->group(function () {
 
     Route::get('/attachments/{id}/view', function ($id) {
         $attachment = \App\Models\ApplicantAttachment::findOrFail($id);
-        $path = storage_path('app/public/' . $attachment->file_path);
+
+        $filePath = ltrim(str_replace(['\\', '/'], DIRECTORY_SEPARATOR, $attachment->file_path), DIRECTORY_SEPARATOR);
+        $path = storage_path('app' . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . $filePath);
 
         if (!file_exists($path)) {
-            return response()->json(['error' => 'File not found'], 404);
+            return response()->json(['error' => 'File not found at ' . $path], 404);
         }
 
         $contentType = 'application/octet-stream';

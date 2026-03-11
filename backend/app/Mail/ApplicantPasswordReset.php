@@ -17,7 +17,7 @@ class ApplicantPasswordReset extends Mailable
 
     public function __construct(string $resetUrl, string $applicantName)
     {
-        $this->resetUrl      = $resetUrl;
+        $this->resetUrl = $resetUrl;
         $this->applicantName = $applicantName;
     }
 
@@ -28,7 +28,14 @@ class ApplicantPasswordReset extends Mailable
 
     public function content(): Content
     {
-        return new Content(view: 'emails.password-reset');
+        return new Content(
+            view: 'emails.password-reset',
+            with: [
+                // ✅ Pass as object so blade can use $applicant->name
+                'applicant' => (object) ['name' => $this->applicantName],
+                'resetUrl' => $this->resetUrl,
+            ]
+        );
     }
 
     public function attachments(): array

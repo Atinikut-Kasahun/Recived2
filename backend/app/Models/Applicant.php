@@ -32,6 +32,9 @@ class Applicant extends Model
         'technical_interview_score',
         'interviewer_feedback',
         'exam_paper_path',
+        'offer_letter_path',
+        'offered_salary',
+        'start_date',
         'feedback',
         'hired_at',
         'password',          // applicant portal account password

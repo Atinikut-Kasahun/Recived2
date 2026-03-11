@@ -26,16 +26,16 @@
         }
 
         .header {
-            background: linear-gradient(135deg, #1A2B3D 0%, #1F7A6E 100%);
-            color: #ffffff;
+            background: #FDF22F;
+            color: #000000;
             padding: 48px;
             text-align: center;
         }
 
         .badge {
             display: inline-block;
-            background: rgba(255, 255, 255, 0.2);
-            color: #ffffff;
+            background: rgba(0, 0, 0, 0.1);
+            color: #000000;
             font-size: 11px;
             font-weight: 800;
             letter-spacing: 2px;
@@ -80,7 +80,7 @@
         .offer-title {
             font-size: 12px;
             font-weight: 800;
-            color: #047857;
+            color: #111;
             text-transform: uppercase;
             letter-spacing: 1.5px;
             margin-bottom: 24px;
@@ -91,7 +91,7 @@
             display: flex;
             justify-content: space-between;
             padding: 12px 0;
-            border-bottom: 1px solid rgba(4, 120, 87, 0.1);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
         }
 
         .offer-row:last-child {
@@ -113,13 +113,16 @@
 
         .salary-highlight {
             font-size: 20px;
-            color: #1F7A6E;
+            color: #000;
+            background-color: #FDF22F;
+            padding: 2px 6px;
+            border-radius: 4px;
             font-weight: 900;
         }
 
         .notes-section {
             background: #F9FAFB;
-            border-left: 4px solid #1F7A6E;
+            border-left: 4px solid #FDF22F;
             padding: 24px;
             margin-bottom: 32px;
             border-radius: 0 16px 16px 0;
@@ -155,7 +158,7 @@
         }
 
         .footer {
-            background: #111827;
+            background: #000000;
             padding: 40px;
             text-align: center;
         }
@@ -170,6 +173,18 @@
 
 <body>
     <div class="container">
+        <div style="background-color: #ffffff; padding: 32px 40px 16px; text-align: center;">
+            <div style="font-family: Arial, sans-serif; display: inline-block;">
+                <span
+                    style="display: inline-block; background-color: #FDF22F; color: #000000; padding: 4px 10px; border-radius: 6px; font-weight: 900; font-size: 20px; letter-spacing: -1px; margin-right: 6px; border: 2px solid #000000; box-shadow: 2px 2px 0px #000000; vertical-align: middle;">D</span>
+                <span
+                    style="color: #000000; font-weight: 900; font-size: 22px; letter-spacing: -1px; vertical-align: middle;">DROGA
+                    GROUP</span>
+                <span
+                    style="color: #666666; font-weight: 300; font-size: 22px; letter-spacing: -0.5px; vertical-align: middle; margin-left: 6px;">HIRING
+                    HUB</span>
+            </div>
+        </div>
         <div class="header">
             <div class="badge">Official Offer Letter</div>
             <h1>Congratulations, {{ explode(' ', $applicant->name)[0] }}!</h1>
@@ -206,7 +221,7 @@
 
             @if($notes)
                 <div class="notes-section">
-                    <span class="offer-title" style="color: #1F7A6E; margin-bottom: 8px;">Additional Notes</span>
+                    <span class="offer-title" style="color: #000; margin-bottom: 8px;">Additional Notes</span>
                     <p>{{ $notes }}</p>
                 </div>
             @endif

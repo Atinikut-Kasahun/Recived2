@@ -8,6 +8,9 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
+// ✅ Google Client ID — hardcoded as fallback since env var may not load in all setups
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "950822984178-eqhgqdmrqamg3p7oh1cqif5anih68j17.apps.googleusercontent.com";
+
 interface Job {
     id: number;
     title: string;
@@ -31,8 +34,15 @@ function CareersContent() {
     const [selectedJob, setSelectedJob] = useState<Job | null>(null);
     const [appStep, setAppStep] = useState(0);
     const [isApplying, setIsApplying] = useState(false);
-    const [isGoogleSimulating, setIsGoogleSimulating] = useState(false);
-    const [simulatedEmail, setSimulatedEmail] = useState('');
+
+    // ── OTP / Email verification state ──────────────────────────────────────
+    const [otpSent, setOtpSent] = useState(false);
+    const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
+    const [otpLoading, setOtpLoading] = useState(false);
+    const [otpError, setOtpError] = useState('');
+    const [otpVerified, setOtpVerified] = useState(false);
+    const [resendCooldown, setResendCooldown] = useState(0);
+    const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
     const [formData, setFormData] = useState({
         email: '',
@@ -54,6 +64,13 @@ function CareersContent() {
     const [registerError, setRegisterError] = useState('');
     const [registerLoading, setRegisterLoading] = useState(false);
 
+    // ── Resend cooldown timer ────────────────────────────────────────────────
+    useEffect(() => {
+        if (resendCooldown <= 0) return;
+        const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+        return () => clearTimeout(t);
+    }, [resendCooldown]);
+
     // ── Reset all form state when modal closes ──────────────────────────────
     const handleCloseModal = () => {
         setIsApplying(false);
@@ -66,7 +83,12 @@ function CareersContent() {
         setRegisterConfirm('');
         setRegisterError('');
         setSubmitting(false);
-        router.replace('/careers', { scroll: false }); // clears ?apply=XX from URL
+        setOtpSent(false);
+        setOtpCode(['', '', '', '', '', '']);
+        setOtpError('');
+        setOtpVerified(false);
+        setResendCooldown(0);
+        router.replace('/careers', { scroll: false });
     };
 
     useEffect(() => {
@@ -75,7 +97,6 @@ function CareersContent() {
                 const data = await apiFetch('/v1/public/jobs');
                 const jobList = Array.isArray(data) ? data : (data?.data || []);
                 setJobs(jobList);
-
                 if (applyId) {
                     const jobToApply = jobList.find((j: any) => j.id.toString() === applyId);
                     if (jobToApply) {
@@ -99,56 +120,156 @@ function CareersContent() {
         setAppStep(0);
     };
 
-    const handleIdentitySubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        setAppStep(2);
-    };
-
-    const handleSSO = (provider: string) => {
-        if (provider === 'Google') {
-            const clientID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-            if (clientID && (window as any).google) {
-                (window as any).google.accounts.id.initialize({
-                    client_id: clientID,
-                    callback: (response: any) => {
-                        try {
-                            const base64Url = response.credential.split('.')[1];
-                            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                            const jsonPayload = decodeURIComponent(atob(base64).split('').map((c) => {
-                                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-                            }).join(''));
-                            const profile = JSON.parse(jsonPayload);
-                            setFormData(prev => ({ ...prev, email: profile.email, name: profile.name || prev.name }));
-                            setAppStep(2);
-                        } catch (e) {
-                            console.error("Failed to decode Google JWT", e);
-                            alert("Google login failed. Please try again or use email.");
-                        }
-                    }
-                });
-                (window as any).google.accounts.id.prompt();
+    // ── Send OTP to email ────────────────────────────────────────────────────
+    const handleSendOtp = async () => {
+        if (!formData.email) return;
+        setOtpLoading(true);
+        setOtpError('');
+        try {
+            const cleanBaseUrl = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+            const res = await fetch(`${cleanBaseUrl}/v1/public/send-otp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ email: formData.email }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setOtpSent(true);
+                setResendCooldown(60);
+                setTimeout(() => otpRefs.current[0]?.focus(), 100);
             } else {
-                setIsGoogleSimulating(true);
+                setOtpError(data.message || 'Failed to send OTP. Please try again.');
             }
-        } else {
-            setAppStep(2);
+        } catch {
+            setOtpError('Network error. Please try again.');
+        } finally {
+            setOtpLoading(false);
         }
     };
 
-    const handleMockAccountSelect = (e: React.FormEvent) => {
+    // ── Verify OTP ───────────────────────────────────────────────────────────
+    const handleVerifyOtp = async () => {
+        const code = otpCode.join('');
+        if (code.length !== 6) { setOtpError('Please enter all 6 digits.'); return; }
+        setOtpLoading(true);
+        setOtpError('');
+        try {
+            const cleanBaseUrl = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+            const res = await fetch(`${cleanBaseUrl}/v1/public/verify-otp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ email: formData.email, otp: code }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setOtpVerified(true);
+                setTimeout(() => setAppStep(2), 800);
+            } else {
+                setOtpError(data.message || 'Invalid or expired code. Please try again.');
+            }
+        } catch {
+            setOtpError('Network error. Please try again.');
+        } finally {
+            setOtpLoading(false);
+        }
+    };
+
+    // ── OTP input box handler ────────────────────────────────────────────────
+    const handleOtpChange = (index: number, value: string) => {
+        if (!/^\d*$/.test(value)) return;
+        const next = [...otpCode];
+        next[index] = value.slice(-1);
+        setOtpCode(next);
+        setOtpError('');
+        if (value && index < 5) otpRefs.current[index + 1]?.focus();
+        if (value && index === 5 && next.every(d => d !== '')) {
+            setTimeout(handleVerifyOtp, 50);
+        }
+    };
+
+    const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+        if (e.key === 'Backspace' && !otpCode[index] && index > 0) {
+            otpRefs.current[index - 1]?.focus();
+        }
+    };
+
+    // ── Google OAuth ─────────────────────────────────────────────────────────
+    const handleSSO = (provider: string) => {
+        if (provider === 'Google') {
+            // ✅ Uses hardcoded fallback — always works regardless of env loading
+            const clientID = GOOGLE_CLIENT_ID;
+
+            if (!clientID) {
+                alert('Google Client ID is not configured. Please use email instead.');
+                return;
+            }
+
+            if (!(window as any).google) {
+                alert('Google sign-in is still loading. Please wait a moment and try again.');
+                return;
+            }
+
+            (window as any).google.accounts.id.initialize({
+                client_id: clientID,
+                callback: (response: any) => {
+                    try {
+                        const base64Url = response.credential.split('.')[1];
+                        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                        const jsonPayload = decodeURIComponent(
+                            atob(base64).split('').map((c) =>
+                                '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+                            ).join('')
+                        );
+                        const profile = JSON.parse(jsonPayload);
+                        const googleEmail = profile.email || '';
+                        const googleName = profile.name || '';
+
+                        if (!googleEmail) {
+                            alert('Could not retrieve email from Google. Please use the email option instead.');
+                            return;
+                        }
+
+                        setFormData(prev => ({
+                            ...prev,
+                            email: googleEmail,
+                            name: googleName || prev.name,
+                        }));
+
+                        // ✅ Google verified the email — skip OTP entirely
+                        setOtpVerified(true);
+                        setAppStep(2);
+                    } catch (e) {
+                        console.error('Failed to decode Google JWT', e);
+                        alert('Google login failed. Please try again or use email.');
+                    }
+                },
+            });
+
+            // Show One Tap prompt
+            (window as any).google.accounts.id.prompt((notification: any) => {
+                if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+                    // One Tap blocked — open full Google popup
+                    const params = new URLSearchParams({
+                        client_id: clientID,
+                        redirect_uri: `${window.location.origin}/`,
+                        response_type: 'id_token',
+                        scope: 'openid email profile',
+                        nonce: Math.random().toString(36).substring(2),
+                    });
+                    window.open(
+                        `https://accounts.google.com/o/oauth2/v2/auth?${params}`,
+                        'google-signin',
+                        'width=500,height=600,scrollbars=yes'
+                    );
+                }
+            });
+        }
+    };
+
+    // ── Manual email submit → send OTP ──────────────────────────────────────
+    const handleIdentitySubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!simulatedEmail) return;
-        setIsGoogleSimulating(false);
-        setIsApplying(false);
-        setTimeout(() => {
-            setIsApplying(true);
-            setFormData(prev => ({
-                ...prev,
-                email: simulatedEmail,
-                name: simulatedEmail.split('@')[0].split('.').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ')
-            }));
-            setAppStep(2);
-        }, 1200);
+        handleSendOtp();
     };
 
     const handleResumeUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -341,12 +462,10 @@ function CareersContent() {
             <AnimatePresence>
                 {isApplying && selectedJob && (
                     <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
-                        {/* Backdrop — pointer-events-none so it never blocks clicks. Use X button to close. */}
                         <motion.div
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                             className="fixed inset-0 bg-[#000000]/80 backdrop-blur-md pointer-events-none"
                         />
-
                         <motion.div
                             initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }}
                             className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden relative z-[220] flex flex-col max-h-[90vh]"
@@ -361,11 +480,7 @@ function CareersContent() {
                                     </p>
                                     <h2 className="text-xl font-black text-[#000000]">{selectedJob.title}</h2>
                                 </div>
-                                {/* X button — always visible but changes behaviour on success steps */}
-                                <button
-                                    onClick={handleCloseModal}
-                                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                                >
+                                <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600 transition-colors">
                                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
                                 </button>
                             </div>
@@ -380,7 +495,7 @@ function CareersContent() {
                                                 <svg className="w-40 h-40 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" /></svg>
                                             </div>
                                             <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-3">
-                                                <span className="w-8 h-px bg-gray-200" />Detailed Job Description content<span className="w-8 h-px bg-gray-200" />
+                                                <span className="w-8 h-px bg-gray-200" />Detailed Job Description<span className="w-8 h-px bg-gray-200" />
                                             </h3>
                                             {selectedJob.description ? (
                                                 <div className="text-sm text-gray-800 leading-relaxed prose prose-sm max-w-none prose-headings:font-black prose-strong:font-black prose-p:mb-4" dangerouslySetInnerHTML={{ __html: selectedJob.description }} />
@@ -397,37 +512,130 @@ function CareersContent() {
                                     </motion.div>
                                 )}
 
-                                {/* ── STEP 1: Identity ── */}
+                                {/* ── STEP 1: Identity + Email Verification ── */}
                                 {appStep === 1 && (
                                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
                                         <div className="text-center space-y-2">
                                             <h3 className="text-2xl font-black text-[#000000]">Identity Check</h3>
                                             <p className="text-gray-500 font-medium">Please verify your identity to continue with the application.</p>
                                         </div>
-                                        <div className="space-y-4">
-                                            <button onClick={() => handleSSO('Google')} className="w-full flex items-center justify-center gap-3 py-4 bg-white border-2 border-gray-100 rounded-2xl hover:border-blue-500 hover:bg-blue-50/10 transition-all font-bold text-[#000000]">
-                                                <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" className="w-6 h-6" />
-                                                Continue with Google
-                                            </button>
-                                        </div>
+
+                                        {/* Google Button */}
+                                        <button
+                                            onClick={() => handleSSO('Google')}
+                                            className="w-full flex items-center justify-center gap-3 py-4 bg-white border-2 border-gray-100 rounded-2xl hover:border-blue-500 hover:bg-blue-50/10 transition-all font-bold text-[#000000]"
+                                        >
+                                            <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" className="w-6 h-6" />
+                                            Continue with Google
+                                        </button>
+
                                         <div className="relative">
                                             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-100" /></div>
                                             <div className="relative flex justify-center text-[10px] font-black uppercase tracking-widest bg-white px-4 text-gray-300">Or use email</div>
                                         </div>
-                                        <form onSubmit={handleIdentitySubmit} className="space-y-4">
-                                            <input type="email" required placeholder="Enter your email address" className="w-full px-6 py-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-4 focus:ring-[#FDF22F]/20 focus:border-[#FDF22F] transition-all font-bold text-gray-600" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
-                                            <button type="submit" className="w-full py-4 bg-[#FDF22F] text-black rounded-2xl font-black text-[12px] uppercase tracking-widest hover:bg-black hover:text-white transition-all transform hover:-translate-y-0.5 active:scale-[0.98]">Next Step</button>
-                                        </form>
+
+                                        {/* ── Email entry (before OTP sent) ── */}
+                                        {!otpSent && (
+                                            <form onSubmit={handleIdentitySubmit} className="space-y-4">
+                                                <input
+                                                    type="email"
+                                                    required
+                                                    placeholder="Enter your email address"
+                                                    className="w-full px-6 py-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-4 focus:ring-[#FDF22F]/20 focus:border-[#FDF22F] transition-all font-bold text-gray-600"
+                                                    value={formData.email}
+                                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                                />
+                                                {otpError && <p className="text-red-500 text-xs font-bold px-1">{otpError}</p>}
+                                                <button
+                                                    type="submit"
+                                                    disabled={otpLoading}
+                                                    className="w-full py-4 bg-[#FDF22F] text-black rounded-2xl font-black text-[12px] uppercase tracking-widest hover:bg-black hover:text-white transition-all transform hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-60"
+                                                >
+                                                    {otpLoading ? 'Sending code...' : 'Send Verification Code'}
+                                                </button>
+                                            </form>
+                                        )}
+
+                                        {/* ── OTP entry (after OTP sent) ── */}
+                                        {otpSent && !otpVerified && (
+                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                                                <div className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-2xl px-5 py-4">
+                                                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center shrink-0">
+                                                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-black text-gray-800">Code sent!</p>
+                                                        <p className="text-xs text-gray-500 font-medium">Check <span className="font-black text-gray-700">{formData.email}</span> for a 6-digit code.</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex justify-center gap-3">
+                                                    {otpCode.map((digit, i) => (
+                                                        <input
+                                                            key={i}
+                                                            ref={el => { otpRefs.current[i] = el; }}
+                                                            type="text"
+                                                            inputMode="numeric"
+                                                            maxLength={1}
+                                                            value={digit}
+                                                            onChange={e => handleOtpChange(i, e.target.value)}
+                                                            onKeyDown={e => handleOtpKeyDown(i, e)}
+                                                            className={`w-12 h-14 text-center text-xl font-black border-2 rounded-xl outline-none transition-all
+                                                                ${digit ? 'border-[#FDF22F] bg-[#FDF22F]/10 text-black' : 'border-gray-200 bg-gray-50 text-gray-400'}
+                                                                focus:border-[#FDF22F] focus:ring-4 focus:ring-[#FDF22F]/20`}
+                                                        />
+                                                    ))}
+                                                </div>
+
+                                                {otpError && <p className="text-center text-red-500 text-xs font-bold">{otpError}</p>}
+
+                                                <button
+                                                    onClick={handleVerifyOtp}
+                                                    disabled={otpLoading || otpCode.join('').length !== 6}
+                                                    className="w-full py-4 bg-[#FDF22F] text-black rounded-2xl font-black text-[12px] uppercase tracking-widest hover:bg-black hover:text-white transition-all transform hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-60"
+                                                >
+                                                    {otpLoading ? (
+                                                        <span className="flex items-center justify-center gap-2">
+                                                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                                                            Verifying...
+                                                        </span>
+                                                    ) : 'Verify & Continue'}
+                                                </button>
+
+                                                <div className="flex items-center justify-between text-xs font-bold">
+                                                    <button onClick={() => { setOtpSent(false); setOtpCode(['', '', '', '', '', '']); setOtpError(''); }} className="text-gray-400 hover:text-gray-600 transition-colors">
+                                                        ← Change email
+                                                    </button>
+                                                    <button onClick={handleSendOtp} disabled={resendCooldown > 0 || otpLoading} className="text-blue-500 hover:text-blue-700 transition-colors disabled:text-gray-300 disabled:cursor-not-allowed">
+                                                        {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+                                                    </button>
+                                                </div>
+                                            </motion.div>
+                                        )}
+
+                                        {/* ── OTP success state ── */}
+                                        {otpVerified && (
+                                            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center justify-center gap-3 py-6">
+                                                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
+                                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                                                </div>
+                                                <p className="font-black text-gray-800">Email verified! Redirecting...</p>
+                                            </motion.div>
+                                        )}
                                     </motion.div>
                                 )}
 
                                 {/* ── STEP 2: Resume & Profile ── */}
                                 {appStep === 2 && (
                                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+                                        <div className="flex items-center gap-2 bg-green-50 border border-green-100 rounded-xl px-4 py-2.5">
+                                            <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                                            <p className="text-xs font-black text-green-700">Identity verified — <span className="font-bold text-green-600">{formData.email}</span></p>
+                                        </div>
+
                                         <section className="bg-[#000000]/5 rounded-3xl p-8 border border-[#000000]/10 space-y-4">
                                             <div className="flex justify-between items-center">
                                                 <h3 className="text-[11px] font-black text-[#000000] uppercase tracking-widest">Resume Parsing</h3>
-                                                {resume && <span className="text-[10px] font-black text-[#000000] bg-white px-2 py-1 rounded-full shadow-sm">AI Active ⚡</span>}
                                             </div>
                                             <label className="block p-10 border-2 border-dashed border-[#000000]/30 rounded-2xl text-center cursor-pointer hover:bg-white transition-all group">
                                                 <input type="file" className="hidden" accept=".pdf" onChange={handleResumeUpload} />
@@ -440,6 +648,7 @@ function CareersContent() {
                                                 </div>
                                             </label>
                                         </section>
+
                                         <section className="space-y-6">
                                             <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Profile Details</h3>
                                             <div className="grid grid-cols-2 gap-4">
@@ -456,7 +665,13 @@ function CareersContent() {
                                                     </div>
                                                 </div>
                                                 <div className="col-span-2"><label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Full Name</label><input type="text" placeholder="e.g. John Doe" className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-[#FDF22F]/10 focus:border-[#FDF22F] font-bold text-[#000000] text-sm transition-all" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
-                                                <div className="col-span-2"><label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Email Address</label><input type="email" placeholder="e.g. john@example.com" className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-[#FDF22F]/10 focus:border-[#FDF22F] font-bold text-[#000000] text-sm transition-all" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} /></div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Email Address</label>
+                                                    <div className="relative">
+                                                        <input type="email" readOnly className="w-full px-5 py-4 bg-green-50 border border-green-200 rounded-xl font-bold text-gray-500 text-sm cursor-not-allowed" value={formData.email} />
+                                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-green-600 bg-green-100 px-2 py-1 rounded-full">✓ Verified</span>
+                                                    </div>
+                                                </div>
                                                 <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Phone Number</label><input type="tel" placeholder="e.g. +251 9..." className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-[#FDF22F]/10 focus:border-[#FDF22F] font-bold text-[#000000] text-sm transition-all" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} /></div>
                                                 <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Age</label><input type="number" placeholder="e.g. 25" className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-[#FDF22F]/10 focus:border-[#FDF22F] font-bold text-[#000000] text-sm transition-all" value={formData.age} onChange={(e) => setFormData({ ...formData, age: e.target.value })} /></div>
                                                 <div className="col-span-2"><label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Portfolio Link</label><input type="url" placeholder="https://..." className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-[#FDF22F]/10 focus:border-[#FDF22F] font-bold text-[#000000] text-sm transition-all" value={formData.portfolio_link} onChange={(e) => setFormData({ ...formData, portfolio_link: e.target.value })} /></div>
@@ -465,6 +680,7 @@ function CareersContent() {
                                                 <div className="col-span-2"><label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Years of Experience</label><input type="number" placeholder="e.g. 5" className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-[#FDF22F]/10 focus:border-[#FDF22F] font-bold text-[#000000] text-sm transition-all" value={formData.years_of_experience} onChange={(e) => setFormData({ ...formData, years_of_experience: e.target.value })} /></div>
                                             </div>
                                         </section>
+
                                         <section className="space-y-4">
                                             <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Additional Attachments</h3>
                                             <div className="grid grid-cols-1 gap-2">
@@ -481,6 +697,7 @@ function CareersContent() {
                                                 </label>
                                             </div>
                                         </section>
+
                                         <button onClick={handleSubmitApplication} disabled={submitting || !resume || !formData.name} className="w-full py-5 bg-[#FDF22F] text-black rounded-2xl font-black text-[13px] uppercase tracking-[0.2em] shadow-xl shadow-[#FDF22F]/20 hover:bg-black hover:text-white transition-all transform hover:-translate-y-1 active:scale-[0.98] disabled:opacity-50">
                                             {submitting ? 'Submitting Application...' : 'Confirm & Apply'}
                                         </button>
@@ -540,35 +757,6 @@ function CareersContent() {
                                 )}
 
                             </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
-
-            {/* Google Simulation Modal */}
-            <AnimatePresence>
-                {isGoogleSimulating && (
-                    <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsGoogleSimulating(false)} className="fixed inset-0 bg-white/60 backdrop-blur-sm" />
-                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-[400px] rounded-3xl shadow-2xl border border-gray-100 overflow-hidden relative z-[310] p-10 space-y-8">
-                            <div className="text-center space-y-4">
-                                <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" className="w-12 h-12 mx-auto" />
-                                <div className="space-y-1">
-                                    <h3 className="text-xl font-black text-[#000000]">Sign in with Google</h3>
-                                    <p className="text-xs text-gray-500 font-medium tracking-tight">to continue to {selectedJob?.tenant?.name || 'Hiring Hub'}</p>
-                                </div>
-                            </div>
-                            <form onSubmit={handleMockAccountSelect} className="space-y-6">
-                                <div className="space-y-2">
-                                    <input autoFocus type="email" required placeholder="Email or phone" className="w-full px-4 py-3 border border-gray-200 rounded-lg outline-none focus:border-blue-500 font-medium text-sm transition-all" value={simulatedEmail} onChange={(e) => setSimulatedEmail(e.target.value)} />
-                                    <p className="text-[11px] text-blue-600 font-bold cursor-pointer hover:underline">Forgot email?</p>
-                                </div>
-                                <div className="text-[13px] text-gray-500 leading-relaxed font-medium">To continue, Google will share your name, email address, language preference, and profile picture with Droga.</div>
-                                <div className="flex justify-between items-center pt-4">
-                                    <button type="button" onClick={() => setIsGoogleSimulating(false)} className="text-sm font-bold text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg transition-colors">Create account</button>
-                                    <button type="submit" className="bg-blue-600 text-white px-8 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-all">Next</button>
-                                </div>
-                            </form>
                         </motion.div>
                     </div>
                 )}

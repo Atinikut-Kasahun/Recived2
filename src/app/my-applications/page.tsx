@@ -678,29 +678,10 @@ export default function MyApplicationsPage() {
                             <div className="p-10">
                                 <AuthForm mode={authMode} onSuccess={handleAuthSuccess} />
                                 <p className="mt-5 text-center text-[11px] font-bold text-gray-400">
-                                    Password not working? <button 
-                                        type="button"
-                                        onClick={async () => {
-                                            const email = (document.querySelector('input[type="email"]') as HTMLInputElement)?.value;
-                                            if (!email) {
-                                                alert("Please enter your email address first.");
-                                                return;
-                                            }
-                                            try {
-                                                const cleanBase = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
-                                                const res = await fetch(`${cleanBase}/v1/applicant/forgot-password`, {
-                                                    method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({ email }),
-                                                });
-                                                const data = await res.json();
-                                                alert(data.message);
-                                            } catch (err) {
-                                                alert("Failed to send reset link.");
-                                            }
-                                        }} 
+                                    Password not working? <Link
+                                        href="/applicant/forgot-password"
                                         className="text-black font-black hover:underline"
-                                    >Reset your password →</button>
+                                    >Reset your password →</Link>
                                 </p>
 
                                 <div className="mt-6 pt-6 border-t border-gray-50">

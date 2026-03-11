@@ -18,7 +18,7 @@
     @if($customMessage)
         **Message to Candidate:**
         <div
-            style="padding: 15px; background: #f9f9f9; border-left: 4px solid #1F7A6E; margin-top: 10px; margin-bottom: 20px;">
+            style="padding: 15px; background: #f9f9f9; border-left: 4px solid #FDF22F; margin-top: 10px; margin-bottom: 20px;">
             {!! nl2br(e($customMessage)) !!}
         </div>
     @endif

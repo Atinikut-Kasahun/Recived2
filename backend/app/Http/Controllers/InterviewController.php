@@ -58,8 +58,10 @@ class InterviewController extends Controller
         // Load relationships for emails
         $interview->load(['applicant.jobPosting', 'interviewer', 'tenant']);
 
-        // Send Email to Applicant
-        Mail::to($interview->applicant->email)->send(new InterviewScheduledApplicant($interview, $request->message));
+        // Send Email to Applicant (unless explicitly skipped — usually when a status update triggers its own branded mail)
+        if (!$request->boolean('skip_email')) {
+            Mail::to($interview->applicant->email)->send(new InterviewScheduledApplicant($interview, $request->message));
+        }
 
         // Send Email to Manager/Interviewer
         Mail::to($interview->interviewer->email)->send(new InterviewScheduledManager($interview, $request->message));

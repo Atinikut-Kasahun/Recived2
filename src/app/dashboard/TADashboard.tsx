@@ -101,7 +101,18 @@ export default function TADashboard({
     title: "",
     label: "",
   });
-  const [globalScheduleForm, setGlobalScheduleForm] = useState({
+  const [globalScheduleForm, setGlobalScheduleForm] = useState<{
+    date: string;
+    time: string;
+    location: string;
+    interviewer_id: string;
+    message: string;
+    offered_salary: string;
+    start_date: string;
+    offer_notes: string;
+    rejection_note: string;
+    offer_letter: File | null;
+  }>({
     date: "",
     time: "",
     location: "Main Office",
@@ -112,6 +123,7 @@ export default function TADashboard({
     start_date: "",
     offer_notes: "",
     rejection_note: "",
+    offer_letter: null,
   });
 
   // Scoring & Results Modal State
@@ -726,6 +738,7 @@ export default function TADashboard({
         start_date: "",
         offer_notes: "",
         rejection_note: "",
+        offer_letter: null,
       });
       setGlobalScheduleModal(true);
     }
@@ -757,26 +770,48 @@ export default function TADashboard({
           type: scheduleContext.interviewType,
           location: globalScheduleForm.location,
           message: globalScheduleForm.message,
+          skip_email: true,
         }),
       });
 
-      // 2. Update applicant status with extended data
-      await apiFetch(`/v1/applicants/${drawerApp.id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: scheduleContext.targetStatus,
-          // Conditionally include offer/rejection fields
-          ...(scheduleContext.targetStatus === "offer" && {
-            offered_salary: globalScheduleForm.offered_salary,
-            start_date: globalScheduleForm.start_date,
-            offer_notes: globalScheduleForm.offer_notes,
+      // 2. Update applicant status — use FormData when an offer letter PDF is attached
+      if (scheduleContext.targetStatus === "offer" && globalScheduleForm.offer_letter) {
+        // Multipart request so the PDF gets uploaded
+        const fd = new FormData();
+        fd.append("status", scheduleContext.targetStatus);
+        if (globalScheduleForm.offered_salary) fd.append("offered_salary", globalScheduleForm.offered_salary);
+        if (globalScheduleForm.start_date) fd.append("start_date", globalScheduleForm.start_date);
+        if (globalScheduleForm.offer_notes) fd.append("offer_notes", globalScheduleForm.offer_notes);
+        if (globalScheduleForm.rejection_note) fd.append("rejection_note", globalScheduleForm.rejection_note);
+        fd.append("interview_message", globalScheduleForm.message || "");
+        fd.append("interview_location", globalScheduleForm.location || "");
+        fd.append("offer_letter", globalScheduleForm.offer_letter);
+        // Laravel needs _method spoofing for PATCH with FormData
+        fd.append("_method", "PATCH");
+        await apiFetch(`/v1/applicants/${drawerApp.id}/status`, {
+          method: "POST",
+          body: fd,
+          // ⚠️ Don't set Content-Type — browser sets it with the correct boundary
+        });
+      } else {
+        await apiFetch(`/v1/applicants/${drawerApp.id}/status`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: scheduleContext.targetStatus,
+            ...(scheduleContext.targetStatus === "offer" && {
+              offered_salary: globalScheduleForm.offered_salary,
+              start_date: globalScheduleForm.start_date,
+              offer_notes: globalScheduleForm.offer_notes,
+            }),
+            interview_message: globalScheduleForm.message,
+            interview_location: globalScheduleForm.location,
+            ...(scheduleContext.targetStatus === "rejected" && {
+              rejection_note: globalScheduleForm.rejection_note,
+            }),
           }),
-          ...(scheduleContext.targetStatus === "rejected" && {
-            rejection_note: globalScheduleForm.rejection_note,
-          }),
-        }),
-      });
+        });
+      }
 
       showToast(
         `${scheduleContext.title} scheduled for ${drawerApp.name}`,
@@ -1030,11 +1065,10 @@ export default function TADashboard({
                         setCurrentPage(1);
                       }
                     }}
-                    className={`pb-4 text-[12px] font-black tracking-[0.15em] transition-all relative ${
-                      isActive
-                        ? "text-[#000000]"
-                        : "text-gray-400 hover:text-gray-600"
-                    }`}
+                    className={`pb-4 text-[12px] font-black tracking-[0.15em] transition-all relative ${isActive
+                      ? "text-[#000000]"
+                      : "text-gray-400 hover:text-gray-600"
+                      }`}
                   >
                     <span className="uppercase">{t}</span>
                     {isActive && (
@@ -1387,7 +1421,7 @@ export default function TADashboard({
                               const now = new Date();
                               const diffDays = Math.floor(
                                 (now.getTime() - d.getTime()) /
-                                  (1000 * 60 * 60 * 24),
+                                (1000 * 60 * 60 * 24),
                               );
                               const relative =
                                 diffDays === 0
@@ -1547,11 +1581,10 @@ export default function TADashboard({
                         <button
                           key={pageNum}
                           onClick={() => fetchData(pageNum)}
-                          className={`w-10 h-10 rounded-xl text-[11px] font-black transition-all shadow-sm border ${
-                            currentPage === pageNum
-                              ? "bg-[#FDF22F] text-black border-[#FDF22F]"
-                              : "bg-white text-gray-400 border-gray-200 hover:border-[#FDF22F] hover:text-[#000000]"
-                          }`}
+                          className={`w-10 h-10 rounded-xl text-[11px] font-black transition-all shadow-sm border ${currentPage === pageNum
+                            ? "bg-[#FDF22F] text-black border-[#FDF22F]"
+                            : "bg-white text-gray-400 border-gray-200 hover:border-[#FDF22F] hover:text-[#000000]"
+                            }`}
                         >
                           {pageNum}
                         </button>
@@ -1626,7 +1659,7 @@ export default function TADashboard({
                   {loading
                     ? "..."
                     : initialTab === "Employees" &&
-                        (subTab === "STAFF" || subTab === "SEPARATED")
+                      (subTab === "STAFF" || subTab === "SEPARATED")
                       ? (employeesPagination?.total ?? 0)
                       : (applicantsPagination?.total ?? 0)}
                 </span>
@@ -2052,13 +2085,12 @@ export default function TADashboard({
                         </div>
                         <div className="flex flex-col items-end gap-2">
                           <span
-                            className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm shadow-black/5 ${
-                              app.status === "hired"
-                                ? "bg-[#FDF22F] text-black ring-1 ring-black/5"
-                                : app.status === "rejected"
-                                  ? "bg-red-50 text-red-600"
-                                  : "bg-gray-100 text-gray-500"
-                            }`}
+                            className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm shadow-black/5 ${app.status === "hired"
+                              ? "bg-[#FDF22F] text-black ring-1 ring-black/5"
+                              : app.status === "rejected"
+                                ? "bg-red-50 text-red-600"
+                                : "bg-gray-100 text-gray-500"
+                              }`}
                           >
                             {app.status}
                           </span>
@@ -2086,9 +2118,9 @@ export default function TADashboard({
                           <p className="text-[13px] font-black text-black">
                             {app.created_at
                               ? new Date(app.created_at).toLocaleDateString(
-                                  "en-US",
-                                  { month: "short", day: "numeric" },
-                                )
+                                "en-US",
+                                { month: "short", day: "numeric" },
+                              )
                               : "Today"}
                           </p>
                         </div>
@@ -2123,11 +2155,30 @@ export default function TADashboard({
                 <tr>
                   {initialTab === "Employees" && subTab === "STAFF"
                     ? [
+                      "CANDIDATE",
+                      "ROLE",
+                      "DEPARTMENT",
+                      "STATUS",
+                      "JOINED DATE",
+                      "ACTIONS",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        className={`px-5 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest ${h === "ACTIONS" ? "text-right" : ""}`}
+                      >
+                        {h}
+                      </th>
+                    ))
+                    : initialTab === "Employees"
+                      ? [
                         "CANDIDATE",
-                        "ROLE",
+                        "APPLIED FOR",
                         "DEPARTMENT",
+                        "EXPERIENCE",
+                        "MATCHING",
                         "STATUS",
-                        "JOINED DATE",
+                        "HIRED ON",
+                        "APPLIED ON",
                         "ACTIONS",
                       ].map((h) => (
                         <th
@@ -2137,44 +2188,25 @@ export default function TADashboard({
                           {h}
                         </th>
                       ))
-                    : initialTab === "Employees"
-                      ? [
-                          "CANDIDATE",
-                          "APPLIED FOR",
-                          "DEPARTMENT",
-                          "EXPERIENCE",
-                          "MATCHING",
-                          "STATUS",
-                          "HIRED ON",
-                          "APPLIED ON",
-                          "ACTIONS",
-                        ].map((h) => (
+                      : [
+                        "CANDIDATE",
+                        "APPLIED FOR",
+                        "DEPARTMENT",
+                        "EXPERIENCE",
+                        "MATCHING",
+                        "STATUS",
+                        subTab === "HIRED" ? "HIRED ON" : null,
+                        "APPLIED ON",
+                      ]
+                        .filter(Boolean)
+                        .map((h) => (
                           <th
-                            key={h}
-                            className={`px-5 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest ${h === "ACTIONS" ? "text-right" : ""}`}
+                            key={h as string}
+                            className="px-8 py-4 text-[11px] font-black text-gray-400 uppercase tracking-widest"
                           >
                             {h}
                           </th>
-                        ))
-                      : [
-                          "CANDIDATE",
-                          "APPLIED FOR",
-                          "DEPARTMENT",
-                          "EXPERIENCE",
-                          "MATCHING",
-                          "STATUS",
-                          subTab === "HIRED" ? "HIRED ON" : null,
-                          "APPLIED ON",
-                        ]
-                          .filter(Boolean)
-                          .map((h) => (
-                            <th
-                              key={h as string}
-                              className="px-8 py-4 text-[11px] font-black text-gray-400 uppercase tracking-widest"
-                            >
-                              {h}
-                            </th>
-                          ))}
+                        ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -2221,11 +2253,10 @@ export default function TADashboard({
                         </td>
                         <td className="px-5 py-5">
                           <span
-                            className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest ${
-                              emp.employment_status === "active"
-                                ? "bg-[#FDF22F] text-[#000000] shadow-sm shadow-[#FDF22F]/30 ring-1 ring-[#FDF22F]/50"
-                                : "bg-red-50 text-red-600"
-                            }`}
+                            className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest ${emp.employment_status === "active"
+                              ? "bg-[#FDF22F] text-[#000000] shadow-sm shadow-[#FDF22F]/30 ring-1 ring-[#FDF22F]/50"
+                              : "bg-red-50 text-red-600"
+                              }`}
                           >
                             {emp.employment_status}
                           </span>
@@ -2269,181 +2300,180 @@ export default function TADashboard({
                     </td>
                   </tr>
                 ) : (
-                    applicants.map((app: any) => (
-                      <tr
-                        key={app.id}
-                        className="hover:bg-gray-50 transition-colors group cursor-pointer"
-                        onClick={() => setDrawerApp(app)}
-                      >
-                        <td className="px-5 py-5">
-                          <div className="flex items-center gap-3">
-                            <div className="relative group/avatar">
-                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden border border-gray-100 group-hover:border-[#FDF22F] transition-all duration-300 shadow-sm">
-                                {app.photo_path ? (
-                                  <img
-                                    src={
-                                      app.photo_path.startsWith("http")
-                                        ? app.photo_path
-                                        : `${API_URL.replace("/api", "/storage")}/${app.photo_path}`
-                                    }
-                                    alt=""
-                                    className="w-full h-full object-cover transition-transform duration-500 group-hover/avatar:scale-110"
-                                    onError={(e) => {
-                                      (e.target as HTMLImageElement).src =
-                                        `https://ui-avatars.com/api/?name=${encodeURIComponent(app.name)}&background=FDF22F&color=000&bold=true`;
-                                    }}
-                                  />
-                                ) : (
-                                  <span className="text-[11px] font-black text-[#000000]">
-                                    {app.name
-                                      .split(" ")
-                                      .map((n: string) => n[0])
-                                      .join("")}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white bg-[#FDF22F] shadow-sm" />
-                            </div>
-                            <div className="space-y-0.5 min-w-0">
-                              <p className="font-black text-[13px] text-[#000000] tracking-tight truncate">
-                                {app.name}
-                              </p>
-                              <div className="flex items-center gap-1.5 overflow-hidden">
-                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest truncate">
-                                  {app.email}
+                  applicants.map((app: any) => (
+                    <tr
+                      key={app.id}
+                      className="hover:bg-gray-50 transition-colors group cursor-pointer"
+                      onClick={() => setDrawerApp(app)}
+                    >
+                      <td className="px-5 py-5">
+                        <div className="flex items-center gap-3">
+                          <div className="relative group/avatar">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden border border-gray-100 group-hover:border-[#FDF22F] transition-all duration-300 shadow-sm">
+                              {app.photo_path ? (
+                                <img
+                                  src={
+                                    app.photo_path.startsWith("http")
+                                      ? app.photo_path
+                                      : `${API_URL.replace("/api", "/storage")}/${app.photo_path}`
+                                  }
+                                  alt=""
+                                  className="w-full h-full object-cover transition-transform duration-500 group-hover/avatar:scale-110"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src =
+                                      `https://ui-avatars.com/api/?name=${encodeURIComponent(app.name)}&background=FDF22F&color=000&bold=true`;
+                                  }}
+                                />
+                              ) : (
+                                <span className="text-[11px] font-black text-[#000000]">
+                                  {app.name
+                                    .split(" ")
+                                    .map((n: string) => n[0])
+                                    .join("")}
                                 </span>
-                              </div>
+                              )}
+                            </div>
+                            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white bg-[#FDF22F] shadow-sm" />
+                          </div>
+                          <div className="space-y-0.5 min-w-0">
+                            <p className="font-black text-[13px] text-[#000000] tracking-tight truncate">
+                              {app.name}
+                            </p>
+                            <div className="flex items-center gap-1.5 overflow-hidden">
+                              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest truncate">
+                                {app.email}
+                              </span>
                             </div>
                           </div>
-                        </td>
-                        <td className="px-5 py-5">
-                          <p className="text-[12px] font-bold text-[#000000] truncate max-w-[140px]">
-                            {app.job_posting?.title || "Open Role"}
-                          </p>
-                          <p className="text-[9px] font-medium text-gray-400 uppercase tracking-widest mt-0.5">
-                            REQ
-                            {app.job_posting?.job_requisition_id || "---"}
-                          </p>
-                        </td>
-                        <td className="px-5 py-5 text-[12px] text-gray-600 font-medium">
-                          {app.job_posting?.department ||
-                            app.job_posting?.requisition?.department ||
-                            "-"}
-                        </td>
-                        <td className="px-5 py-5 text-[12px] text-gray-600">
-                          {app.years_of_experience || "0"} Years
-                        </td>
-                        <td className="px-5 py-5">
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-[#FDF22F] rounded-full"
-                                style={{ width: `${app.match_score || 85}%` }}
-                              />
-                            </div>
-                            <span className="text-[10px] font-black text-[#000000]">
-                              {app.match_score || 85}%
-                            </span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-5">
+                        <p className="text-[12px] font-bold text-[#000000] truncate max-w-[140px]">
+                          {app.job_posting?.title || "Open Role"}
+                        </p>
+                        <p className="text-[9px] font-medium text-gray-400 uppercase tracking-widest mt-0.5">
+                          REQ
+                          {app.job_posting?.job_requisition_id || "---"}
+                        </p>
+                      </td>
+                      <td className="px-5 py-5 text-[12px] text-gray-600 font-medium">
+                        {app.job_posting?.department ||
+                          app.job_posting?.requisition?.department ||
+                          "-"}
+                      </td>
+                      <td className="px-5 py-5 text-[12px] text-gray-600">
+                        {app.years_of_experience || "0"} Years
+                      </td>
+                      <td className="px-5 py-5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-[#FDF22F] rounded-full"
+                              style={{ width: `${app.match_score || 85}%` }}
+                            />
                           </div>
-                        </td>
-                        <td className="px-5 py-5">
-                          {app.status === "interview" &&
+                          <span className="text-[10px] font-black text-[#000000]">
+                            {app.match_score || 85}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-5">
+                        {app.status === "interview" &&
                           app.interviews &&
                           app.interviews.length > 0 ? (
-                            <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-purple-50 text-purple-600">
-                              Scheduled
-                            </span>
-                          ) : (
-                            <span
-                              className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${
-                                app.status === "hired"
-                                  ? "bg-[#FDF22F] text-[#000000] shadow-sm ring-1 ring-[#FDF22F]/50"
-                                  : app.status === "rejected"
-                                    ? "bg-red-50 text-red-600"
-                                    : "bg-blue-50 text-blue-600"
+                          <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-purple-50 text-purple-600">
+                            Scheduled
+                          </span>
+                        ) : (
+                          <span
+                            className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${app.status === "hired"
+                              ? "bg-[#FDF22F] text-[#000000] shadow-sm ring-1 ring-[#FDF22F]/50"
+                              : app.status === "rejected"
+                                ? "bg-red-50 text-red-600"
+                                : "bg-blue-50 text-blue-600"
                               }`}
-                            >
-                              {app.status}
+                          >
+                            {app.status}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-5">
+                        {app.hired_at ? (
+                          <div className="flex flex-col gap-0.5">
+                            <p className="text-[11px] font-black text-black">
+                              {new Date(app.hired_at).toLocaleDateString(
+                                "en-US",
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                },
+                              )}
+                            </p>
+                            <span className="text-[8px] font-black text-gray-300 uppercase tracking-widest">
+                              Officially Hired
                             </span>
-                          )}
-                        </td>
-                        <td className="px-5 py-5">
-                          {app.hired_at ? (
-                            <div className="flex flex-col gap-0.5">
-                              <p className="text-[11px] font-black text-black">
-                                {new Date(app.hired_at).toLocaleDateString(
-                                  "en-US",
-                                  {
+                          </div>
+                        ) : (
+                          <span className="text-gray-200 text-[10px] font-black tracking-widest">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-5">
+                        {app.created_at ? (
+                          (() => {
+                            const d = new Date(app.created_at);
+                            return (
+                              <div className="flex flex-col gap-0.5">
+                                <p className="text-[11px] font-black text-black">
+                                  {d.toLocaleDateString("en-US", {
                                     month: "short",
                                     day: "numeric",
                                     year: "numeric",
-                                  },
-                                )}
-                              </p>
-                              <span className="text-[8px] font-black text-gray-300 uppercase tracking-widest">
-                                Officially Hired
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-gray-200 text-[10px] font-black tracking-widest">—</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-5">
-                          {app.created_at ? (
-                            (() => {
-                              const d = new Date(app.created_at);
-                              return (
-                                <div className="flex flex-col gap-0.5">
-                                  <p className="text-[11px] font-black text-black">
-                                    {d.toLocaleDateString("en-US", {
-                                      month: "short",
-                                      day: "numeric",
-                                      year: "numeric",
-                                    })}
-                                  </p>
-                                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
-                                    {d.toLocaleTimeString("en-US", {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })}
-                                  </p>
-                                </div>
-                              );
-                            })()
-                          ) : (
-                            <span className="text-gray-200 text-[10px] font-black uppercase tracking-widest">—</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-5 text-right">
-                          {initialTab === "Employees" && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedEmployee(app);
-                                setEmployeeStatusForm({
-                                  status: app.employment_status || "active",
-                                  reason: app.separation_reason || "",
-                                  date: app.separation_date || "",
-                                });
-                                setEmployeeStatusModal(true);
-                              }}
-                              className="px-3 py-1.5 rounded-lg bg-black text-[10px] font-black text-[#FDF22F] uppercase tracking-widest hover:bg-gray-800 transition-all shadow-sm"
-                            >
-                              Manage
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            )}
+                                  })}
+                                </p>
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                                  {d.toLocaleTimeString("en-US", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </p>
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          <span className="text-gray-200 text-[10px] font-black uppercase tracking-widest">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-5 text-right">
+                        {initialTab === "Employees" && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedEmployee(app);
+                              setEmployeeStatusForm({
+                                status: app.employment_status || "active",
+                                reason: app.separation_reason || "",
+                                date: app.separation_date || "",
+                              });
+                              setEmployeeStatusModal(true);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-black text-[10px] font-black text-[#FDF22F] uppercase tracking-widest hover:bg-gray-800 transition-all shadow-sm"
+                          >
+                            Manage
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
 
           {(() => {
             const pagination =
               initialTab === "Employees" &&
-              (subTab === "STAFF" || subTab === "SEPARATED")
+                (subTab === "STAFF" || subTab === "SEPARATED")
                 ? employeesPagination
                 : applicantsPagination;
             if (!pagination) return null;
@@ -2540,13 +2570,12 @@ export default function TADashboard({
                           key={i}
                           disabled={p === "..."}
                           onClick={() => p !== "..." && fetchData(p as number)}
-                          className={`w-9 h-9 rounded-xl text-[11px] font-black transition-all ${
-                            currentPage === p
-                              ? "bg-[#FDF22F] text-black shadow-lg shadow-[#FDF22F]/20 active:scale-95"
-                              : p === "..."
-                                ? "bg-transparent text-gray-300 border-none cursor-default"
-                                : "bg-transparent text-gray-400 hover:text-black hover:bg-gray-50"
-                          }`}
+                          className={`w-9 h-9 rounded-xl text-[11px] font-black transition-all ${currentPage === p
+                            ? "bg-[#FDF22F] text-black shadow-lg shadow-[#FDF22F]/20 active:scale-95"
+                            : p === "..."
+                              ? "bg-transparent text-gray-300 border-none cursor-default"
+                              : "bg-transparent text-gray-400 hover:text-black hover:bg-gray-50"
+                            }`}
                         >
                           {p}
                         </button>
@@ -2877,7 +2906,7 @@ export default function TADashboard({
                         (() => {
                           const d = new Date(
                             req.job_posting.published_at ||
-                              req.job_posting.created_at,
+                            req.job_posting.created_at,
                           );
                           const deadline = req.job_posting.deadline
                             ? new Date(req.job_posting.deadline)
@@ -2923,13 +2952,12 @@ export default function TADashboard({
                     </td>
                     <td className="px-8 py-6">
                       <span
-                        className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${
-                          req.status === "approved"
-                            ? "bg-[#FDF22F] text-black shadow-lg shadow-[#FDF22F]/10"
-                            : req.status === "pending"
-                              ? "bg-amber-50 text-amber-600"
-                              : "bg-red-50 text-red-500"
-                        }`}
+                        className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${req.status === "approved"
+                          ? "bg-[#FDF22F] text-black shadow-lg shadow-[#FDF22F]/10"
+                          : req.status === "pending"
+                            ? "bg-amber-50 text-amber-600"
+                            : "bg-red-50 text-red-500"
+                          }`}
                       >
                         {req.status}
                       </span>
@@ -3240,11 +3268,10 @@ export default function TADashboard({
                 <button
                   onClick={() => fetchData(1)}
                   title="Refresh data"
-                  className={`w-9 h-9 flex items-center justify-center rounded-xl border transition-all shadow-sm ${
-                    statsLoading
-                      ? "bg-[#000000]/5 border-[#000000]/20 text-[#000000] cursor-not-allowed"
-                      : "bg-gray-50 border-gray-100 text-gray-400 hover:bg-[#000000]/5 hover:border-[#000000]/30 hover:text-[#000000]"
-                  }`}
+                  className={`w-9 h-9 flex items-center justify-center rounded-xl border transition-all shadow-sm ${statsLoading
+                    ? "bg-[#000000]/5 border-[#000000]/20 text-[#000000] cursor-not-allowed"
+                    : "bg-gray-50 border-gray-100 text-gray-400 hover:bg-[#000000]/5 hover:border-[#000000]/30 hover:text-[#000000]"
+                    }`}
                 >
                   <svg
                     className={`w-4 h-4 ${statsLoading ? "animate-spin" : ""}`}
@@ -3575,7 +3602,7 @@ export default function TADashboard({
                             y:
                               pad +
                               ((20 - Math.min(d.rate ?? 0, 20)) / 20) *
-                                (H - pad * 2),
+                              (H - pad * 2),
                           }));
 
                         // Catmull-Rom spline → cubic Bézier (gives true smooth curves, no sharp peaks)
@@ -3878,8 +3905,8 @@ export default function TADashboard({
                                 <p className="text-[8px] font-black text-gray-200 mt-0.5">
                                   {stages[i - 1].count > 0
                                     ? Math.round(
-                                        (s.count / stages[i - 1].count) * 100,
-                                      )
+                                      (s.count / stages[i - 1].count) * 100,
+                                    )
                                     : 0}
                                   % conv.
                                 </p>
@@ -4140,17 +4167,16 @@ export default function TADashboard({
                             </td>
                             <td className="px-8 py-5">
                               <span
-                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 w-fit ${
-                                  app.status === "hired"
-                                    ? "bg-[#FDF22F] text-black shadow-lg shadow-[#FDF22F]/10"
-                                    : app.status === "rejected"
-                                      ? "bg-red-50 text-red-600"
-                                      : app.status === "interview"
-                                        ? "bg-amber-50 text-amber-600"
-                                        : app.status === "offer"
-                                          ? "bg-black text-white"
-                                          : "bg-gray-100 text-gray-500"
-                                }`}
+                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 w-fit ${app.status === "hired"
+                                  ? "bg-[#FDF22F] text-black shadow-lg shadow-[#FDF22F]/10"
+                                  : app.status === "rejected"
+                                    ? "bg-red-50 text-red-600"
+                                    : app.status === "interview"
+                                      ? "bg-amber-50 text-amber-600"
+                                      : app.status === "offer"
+                                        ? "bg-black text-white"
+                                        : "bg-gray-100 text-gray-500"
+                                  }`}
                               >
                                 <div
                                   className={`w-1.5 h-1.5 rounded-full ${app.status === "hired" ? "bg-black" : app.status === "rejected" ? "bg-red-500" : "bg-current opacity-40"}`}
@@ -4329,13 +4355,12 @@ export default function TADashboard({
                       Status
                     </p>
                     <span
-                      className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest ${
-                        drawerReq.status === "approved"
-                          ? "bg-[#FDF22F] text-black"
-                          : drawerReq.status === "pending"
-                            ? "bg-amber-50 text-amber-600"
-                            : "bg-red-50 text-red-500"
-                      }`}
+                      className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-widest ${drawerReq.status === "approved"
+                        ? "bg-[#FDF22F] text-black"
+                        : drawerReq.status === "pending"
+                          ? "bg-amber-50 text-amber-600"
+                          : "bg-red-50 text-red-500"
+                        }`}
                     >
                       {drawerReq.status}
                     </span>
@@ -4692,11 +4717,10 @@ export default function TADashboard({
                                 source: src,
                               })
                             }
-                            className={`p-3 text-xs font-black uppercase tracking-widest rounded-xl border transition-all ${
-                              candidateForm.source === src
-                                ? "bg-[#FDF22F]/10 border-[#FDF22F] text-black shadow-lg shadow-[#FDF22F]/10"
-                                : "bg-gray-50 border-gray-100 text-gray-400 hover:border-gray-200"
-                            }`}
+                            className={`p-3 text-xs font-black uppercase tracking-widest rounded-xl border transition-all ${candidateForm.source === src
+                              ? "bg-[#FDF22F]/10 border-[#FDF22F] text-black shadow-lg shadow-[#FDF22F]/10"
+                              : "bg-gray-50 border-gray-100 text-gray-400 hover:border-gray-200"
+                              }`}
                           >
                             {src}
                           </button>
@@ -5018,45 +5042,45 @@ export default function TADashboard({
                   {/* Scoring & Assessment Results */}
                   {(drawerApp.written_exam_score ||
                     drawerApp.technical_interview_score) && (
-                    <section className="space-y-4">
-                      <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-[#FDF22F]" />
-                        Scoring & Assessment
-                      </h3>
-                      <div className="grid grid-cols-2 gap-6">
-                        <div className="p-6 bg-[#FDF22F]/5 border border-[#FDF22F]/20 rounded-3xl">
-                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
-                            Written Exam
-                          </p>
-                          <p className="text-3xl font-black text-black">
-                            {drawerApp.written_exam_score
-                              ? `${drawerApp.written_exam_score}%`
-                              : "N/A"}
-                          </p>
+                      <section className="space-y-4">
+                        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#FDF22F]" />
+                          Scoring & Assessment
+                        </h3>
+                        <div className="grid grid-cols-2 gap-6">
+                          <div className="p-6 bg-[#FDF22F]/5 border border-[#FDF22F]/20 rounded-3xl">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
+                              Written Exam
+                            </p>
+                            <p className="text-3xl font-black text-black">
+                              {drawerApp.written_exam_score
+                                ? `${drawerApp.written_exam_score}%`
+                                : "N/A"}
+                            </p>
+                          </div>
+                          <div className="p-6 bg-[#FDF22F]/5 border border-[#FDF22F]/20 rounded-3xl">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
+                              Technical Interview
+                            </p>
+                            <p className="text-3xl font-black text-black">
+                              {drawerApp.technical_interview_score
+                                ? `${drawerApp.technical_interview_score}%`
+                                : "N/A"}
+                            </p>
+                          </div>
                         </div>
-                        <div className="p-6 bg-[#FDF22F]/5 border border-[#FDF22F]/20 rounded-3xl">
-                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
-                            Technical Interview
-                          </p>
-                          <p className="text-3xl font-black text-black">
-                            {drawerApp.technical_interview_score
-                              ? `${drawerApp.technical_interview_score}%`
-                              : "N/A"}
-                          </p>
-                        </div>
-                      </div>
-                      {drawerApp.interviewer_feedback && (
-                        <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100">
-                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
-                            Interviewer Feedback
-                          </p>
-                          <p className="text-sm font-medium text-gray-600 italic leading-relaxed">
-                            &quot;{drawerApp.interviewer_feedback}&quot;
-                          </p>
-                        </div>
-                      )}
-                    </section>
-                  )}
+                        {drawerApp.interviewer_feedback && (
+                          <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
+                              Interviewer Feedback
+                            </p>
+                            <p className="text-sm font-medium text-gray-600 italic leading-relaxed">
+                              &quot;{drawerApp.interviewer_feedback}&quot;
+                            </p>
+                          </div>
+                        )}
+                      </section>
+                    )}
 
                   {/* Supporting Documents */}
                   <section className="space-y-4">
@@ -5417,9 +5441,9 @@ export default function TADashboard({
                         </button>
                       )}
 
-                        <button
-                          onClick={() => openStageScheduleModal("rejected")}
-                          disabled={actionLoading}
+                      <button
+                        onClick={() => openStageScheduleModal("rejected")}
+                        disabled={actionLoading}
                         className="flex-1 py-5 bg-white text-red-500 border-2 border-red-50 rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] hover:bg-red-50 hover:border-red-100 transition-all"
                       >
                         {actionLoading ? (
@@ -5640,9 +5664,15 @@ export default function TADashboard({
                 <button
                   onClick={() => handleUpdateScores()}
                   disabled={actionLoading}
-                  className="flex-1 py-5 bg-black text-white rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] hover:bg-gray-800 transition-all shadow-xl shadow-black/10 disabled:opacity-70"
+                  className="flex-1 py-5 bg-black text-white rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] hover:bg-gray-800 transition-all shadow-xl shadow-black/10 disabled:opacity-100 disabled:cursor-wait"
                 >
-                  💾 Save Only
+                  {actionLoading ? (
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="w-5 h-5 border-[3px] border-white/20 border-t-white rounded-full animate-spin" />
+                    </div>
+                  ) : (
+                    "💾 Save Only"
+                  )}
                 </button>
 
                 {drawerApp.status === "written_exam" && (
@@ -5658,9 +5688,16 @@ export default function TADashboard({
                       handleUpdateScores("technical_interview");
                     }}
                     disabled={actionLoading}
-                    className="flex-[2] py-5 bg-[#FDF22F] text-black rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl shadow-[#FDF22F]/40 hover:scale-[1.02] hover:bg-black hover:text-white transition-all disabled:opacity-70"
+                    className="flex-[2] py-5 bg-[#FDF22F] text-black rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl shadow-[#FDF22F]/40 hover:scale-[1.02] hover:bg-black hover:text-white transition-all disabled:opacity-100 disabled:cursor-wait"
                   >
-                    Save & Move to Tech Interview
+                    {actionLoading ? (
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="w-5 h-5 border-[3px] border-black/10 border-t-black rounded-full animate-spin" />
+                        <span className="opacity-50">Processing...</span>
+                      </div>
+                    ) : (
+                      "Save & Move to Tech Interview"
+                    )}
                   </button>
                 )}
 
@@ -5677,9 +5714,16 @@ export default function TADashboard({
                       handleUpdateScores("final_interview");
                     }}
                     disabled={actionLoading}
-                    className="flex-[2] py-5 bg-[#FDF22F] text-black rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl shadow-[#FDF22F]/40 hover:scale-[1.02] hover:bg-black hover:text-white transition-all disabled:opacity-70"
+                    className="flex-[2] py-5 bg-[#FDF22F] text-black rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl shadow-[#FDF22F]/40 hover:scale-[1.02] hover:bg-black hover:text-white transition-all disabled:opacity-100 disabled:cursor-wait"
                   >
-                    Save & Move to Final Interview
+                    {actionLoading ? (
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="w-5 h-5 border-[3px] border-black/10 border-t-black rounded-full animate-spin" />
+                        <span className="opacity-50">Processing...</span>
+                      </div>
+                    ) : (
+                      "Save & Move to Final Interview"
+                    )}
                   </button>
                 )}
 
@@ -5823,10 +5867,13 @@ export default function TADashboard({
                 <button
                   onClick={handleUpdateEmployeeStatus}
                   disabled={actionLoading}
-                  className="flex-[2] py-4 bg-gradient-to-r from-[#000000] to-[#222222] text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-[#000000]/30 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-[2] py-4 bg-gradient-to-r from-[#000000] to-[#222222] text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-[#000000]/30 hover:-translate-y-0.5 transition-all disabled:opacity-100 disabled:cursor-wait"
                 >
                   {actionLoading ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span className="opacity-50">Updating...</span>
+                    </div>
                   ) : (
                     "Confirm Status Update"
                   )}
@@ -6038,6 +6085,51 @@ export default function TADashboard({
                         className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-2 border-transparent focus:border-[#FDF22F] focus:bg-white transition-all text-sm font-bold text-black resize-none"
                       />
                     </div>
+
+                    {/* ── Offer Letter PDF Attachment ── */}
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                        Attach Official Offer Letter <span className="text-gray-300 normal-case font-bold">(PDF, Word, or Scanned Image — will be emailed to candidate)</span>
+                      </label>
+                      {globalScheduleForm.offer_letter ? (
+                        <div className="flex items-center gap-3 px-5 py-4 bg-green-50 border-2 border-green-200 rounded-2xl">
+                          <div className="w-9 h-9 bg-green-100 rounded-xl flex items-center justify-center shrink-0">
+                            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-black text-gray-800 truncate">{globalScheduleForm.offer_letter.name}</p>
+                            <p className="text-[10px] text-gray-400 font-bold">{(globalScheduleForm.offer_letter.size / 1024).toFixed(1)} KB · Document</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setGlobalScheduleForm({ ...globalScheduleForm, offer_letter: null })}
+                            className="w-7 h-7 bg-white border border-gray-200 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:border-red-200 transition-all shrink-0"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex items-center gap-4 px-5 py-5 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl cursor-pointer hover:border-[#FDF22F] hover:bg-[#FDF22F]/5 transition-all group">
+                          <div className="w-10 h-10 bg-white border border-gray-200 rounded-xl flex items-center justify-center shrink-0 group-hover:border-[#FDF22F] transition-all">
+                            <svg className="w-5 h-5 text-gray-400 group-hover:text-black transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-sm font-black text-gray-700">Upload Offer Letter</p>
+                            <p className="text-[10px] text-gray-400 font-bold mt-0.5">Click to browse · PDF, Word, Images · max 20 MB</p>
+                          </div>
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                            className="hidden"
+                            onChange={(e) => setGlobalScheduleForm({ ...globalScheduleForm, offer_letter: e.target.files?.[0] ?? null })}
+                          />
+                        </label>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -6073,10 +6165,13 @@ export default function TADashboard({
                 <button
                   onClick={handleGlobalSchedule}
                   disabled={actionLoading}
-                  className="flex-[2] py-5 bg-[#FDF22F] text-black rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl shadow-[#FDF22F]/40 hover:bg-black hover:text-white hover:-translate-y-1 transition-all disabled:opacity-50"
+                  className="flex-[2] py-5 bg-[#FDF22F] text-black rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl shadow-[#FDF22F]/40 hover:bg-black hover:text-white hover:-translate-y-1 transition-all disabled:opacity-100 disabled:cursor-wait"
                 >
                   {actionLoading ? (
-                    <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin mx-auto" />
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="w-5 h-5 border-[3px] border-black/10 border-t-black rounded-full animate-spin" />
+                      <span className="opacity-50 tracking-widest">Applying...</span>
+                    </div>
                   ) : (
                     "Confirm & Notify"
                   )}
